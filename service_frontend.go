@@ -15,7 +15,8 @@ var (
 	ReqPathRe  *regexp.Regexp
 	GetDbRe    *regexp.Regexp
 	ViewPathRe *regexp.Regexp
-	m          *martini.ClassicMartini
+	// ugh globals
+	m *martini.ClassicMartini
 )
 
 func init() {
