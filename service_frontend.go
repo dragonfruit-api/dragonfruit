@@ -25,7 +25,6 @@ func init() {
 	GetDbRe = regexp.MustCompile("^/([[:word:]]*)/?")
 	ViewPathRe = regexp.MustCompile("(/([[:word:]]*)(/{[[:word:]]*})?)")
 	m = martini.Classic()
-	m.Use(martini.Static("../swagger-ui/dist"))
 }
 
 // blarg...
@@ -36,8 +35,10 @@ func GetMartiniInstance() *martini.ClassicMartini {
 func ServeDocSet(db Db_backend) {
 	m.Map(db)
 	rd, err := LoadDescriptionFromDb(db, "resourceTemplate.json")
+	if err != nil {
+		panic(err)
+	}
 
-	fmt.Println(rd, err)
 	m.Get("/api-docs", func() (int, string) {
 		docs, err := json.Marshal(rd)
 		if err != nil {
@@ -64,7 +65,9 @@ func ServeDocSet(db Db_backend) {
 
 func NewDocFromSummary(r *ResourceSummary, db Db_backend) {
 	res, err := LoadResourceFromDb(db, strings.TrimLeft(r.Path, "/"), "resourceTemplate.json")
-	fmt.Println(err)
+	if err != nil {
+		panic(err)
+	}
 	m.Get("/api-docs"+r.Path, func() (int, string) {
 		doc, err := json.Marshal(res)
 		if err != nil {
@@ -107,8 +110,13 @@ func addOperation(api *Api,
 			}
 
 			result, err := db.Query(q)
+			if err != nil {
+				return 500, err.Error()
+			}
 			out, err := json.Marshal(result)
-			fmt.Println(err)
+			if err != nil {
+				return 500, err.Error()
+			}
 			return 200, string(out)
 		})
 		break
@@ -139,6 +147,5 @@ func addOperation(api *Api,
 
 func translatePath(path string, basepath string) (outpath string) {
 	outpath = basepath + PathRe.ReplaceAllString(path, "/$2/:$4")
-	fmt.Println("outpath: ", outpath)
 	return
 }

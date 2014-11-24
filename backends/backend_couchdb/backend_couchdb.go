@@ -5,7 +5,7 @@ import (
 	"code.google.com/p/go-uuid/uuid"
 	"encoding/json"
 	"errors"
-	"fmt"
+	//"fmt"
 	"github.com/fjl/go-couchdb"
 	"github.com/gedex/inflector"
 	"github.com/ideo/dragonfruit"
@@ -63,12 +63,15 @@ func (d *Db_backend_couch) Prep(database string, resource *dragonfruit.Resource)
 	vd.Id = id
 	vd.Views = make(map[string]view)
 	//revstring, reverror := d.client.DB(database).Rev(id)
-	fmt.Println("rev string and error", vd, id)
+	//fmt.Println("rev string and error", vd, id)
 	dbz, err := d.client.EnsureDB(database)
-	fmt.Println(err)
+	//fmt.Println(err)
+	if err != nil {
+		// do something here
+	}
 
 	err = dbz.Get(id, &vd, nil)
-	fmt.Println(err)
+	//fmt.Println(err)
 
 	vd.Language = "javascript"
 
@@ -181,7 +184,7 @@ func (vd *viewDoc) makePathParamView(api *dragonfruit.Api, op *dragonfruit.Opera
 
 func makePathViewName(path string) string {
 	matches := dragonfruit.ViewPathRe.FindAllStringSubmatch(path, -1)
-	fmt.Println("path view matches:", matches)
+	//fmt.Println("path view matches:", matches)
 	out := make([]string, 0)
 
 	for _, match := range matches {
@@ -229,8 +232,8 @@ func (d *Db_backend_couch) Insert(params dragonfruit.QueryParams) (interface{}, 
 	database := getDatabaseName(params)
 	var document map[string]interface{}
 	json.Unmarshal(params.Body, &document)
-	docId, doc, err := d.Save(database, uuid.New(), document)
-	fmt.Println(docId)
+	_, doc, err := d.Save(database, uuid.New(), document)
+	//fmt.Println(docId)
 
 	return doc, err
 
@@ -266,14 +269,14 @@ func (d *Db_backend_couch) Save(database string,
 	db, err := d.client.EnsureDB(database)
 
 	rev, err := db.Rev(documentId)
-	fmt.Println("reverr", rev, err)
+	//fmt.Println("reverr", rev, err)
 	/*if err != nil {
 		fmt.Println("this is the error", err, rev)
 		return "", nil, err
 	}*/
 
 	_, err = db.Put(documentId, document, rev)
-	fmt.Println("save error: ", err)
+	//fmt.Println("save error: ", err)
 
 	return documentId, document, err
 }
@@ -312,20 +315,18 @@ func (d *Db_backend_couch) queryView(params dragonfruit.QueryParams) (couchDbRes
 	opts := make(map[string]interface{})
 	viewName, ok := pathView(params, opts)
 
-	fmt.Println("view name:", viewName, ok, opts)
-
 	if ok {
 		err = db.View("_design/core", viewName, &result, opts)
 	} else {
 		opts["include_docs"] = true
 		err = db.AllDocs(&result, opts)
-		fmt.Println(result)
+		//fmt.Println(result)
 	}
 	return result, err
 }
 
 func (d *Db_backend_couch) Load(database string, documentId string, doc interface{}) error {
-	fmt.Println(database)
+	//fmt.Println(database)
 	db, err := d.client.EnsureDB(database)
 	if err != nil {
 		return err
@@ -335,7 +336,7 @@ func (d *Db_backend_couch) Load(database string, documentId string, doc interfac
 	// mutate the doc
 	err = db.Get(documentId, doc, nil)
 	if err != nil {
-		fmt.Println("~~~~~~~~~~~~~~~~~~~", err)
+		//fmt.Println("~~~~~~~~~~~~~~~~~~~", err)
 	}
 
 	return err
@@ -377,9 +378,9 @@ func pathView(params dragonfruit.QueryParams, opts map[string]interface{}) (stri
 
 	//matches := pathRe.FindAllStringSubmatch(params.path, -1)
 	key := make([]interface{}, 0)
-	fmt.Println(params.PathParams)
+	//	fmt.Println(params.PathParams)
 	for _, param := range params.PathParams {
-		fmt.Println(param, 0, "0")
+		//		fmt.Println(param, 0, "0")
 
 		key = append(key, param)
 	}
