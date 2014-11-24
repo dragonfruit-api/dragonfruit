@@ -13,32 +13,33 @@ var (
 	commonGetParams     []*Property
 )
 
-func init() {
-	commonResponseCodes = make([]*ResponseMessage, 0)
-	byt, _ := ioutil.ReadFile("responseMessages.json")
-	err := json.Unmarshal(byt, &commonResponseCodes)
-	if err != nil {
-		panic(err)
+func getCommonResponseCodes() []*ResponseMessage {
+	if len(commonResponseCodes) < 1 {
+		commonResponseCodes = make([]*ResponseMessage, 0)
+		byt, _ := ioutil.ReadFile("responseMessages.json")
+		err := json.Unmarshal(byt, &commonResponseCodes)
+		if err != nil {
+			panic(err)
+		}
 	}
+	return commonResponseCodes
+}
 
-	commonGetParams = make([]*Property, 0)
-	byt, _ = ioutil.ReadFile("commonGetParams.json")
-	err = json.Unmarshal(byt, &commonGetParams)
-	if err != nil {
-		panic(err)
+func getCommonGetParams() []*Property {
+	if len(commonGetParams) < 1 {
+		commonGetParams = make([]*Property, 0)
+		byt, _ := ioutil.ReadFile("commonGetParams.json")
+		err := json.Unmarshal(byt, &commonGetParams)
+		if err != nil {
+			panic(err)
+		}
 	}
-
+	return commonGetParams
 }
 
 func LoadDescriptionFromDb(db Db_backend, fallbackTemplate string) (*ResourceDescription, error) {
 	rd := new(ResourceDescription)
-
-	//byt, err := ioutil.ReadFile(fallbackTemplate)
-
-	//json.Unmarshal(byt, rd)
-
 	err := db.Load(SwaggerResourceDB, ResourceDescriptionName, rd)
-	//fmt.Println("error returned by db load:", err, rd)
 
 	if err != nil {
 		//TODO - fix this stupid shadowing issue
@@ -207,7 +208,7 @@ func makeDeleteOperation(modelName string, model *Model, upstreamParams []*Prope
 		Code:    200,
 		Message: "Successfully deleted",
 	}
-	deleteOp.ResponseMessages = append(commonResponseCodes, deleteResp)
+	deleteOp.ResponseMessages = append(getCommonResponseCodes(), deleteResp)
 
 	deleteOp.Parameters = append(deleteOp.Parameters, upstreamParams...)
 	return
@@ -231,7 +232,7 @@ func makeSingleGetOperation(modelName string, model *Model, upstreamParams []*Pr
 		Message:       "Ok",
 		ResponseModel: modelName + strings.Title(ContainerName),
 	}
-	patchOp.ResponseMessages = append(commonResponseCodes, putResp)
+	patchOp.ResponseMessages = append(getCommonResponseCodes(), putResp)
 
 	patchOp.Parameters = append(patchOp.Parameters, upstreamParams...)
 	return
@@ -254,7 +255,7 @@ func makePatchOperation(modelName string, model *Model, upstreamParams []*Proper
 		Message:       "Successfully updated",
 		ResponseModel: modelName,
 	}
-	patchOp.ResponseMessages = append(commonResponseCodes, putResp)
+	patchOp.ResponseMessages = append(getCommonResponseCodes(), putResp)
 
 	// The put body
 	bodyParam := &Property{
@@ -285,7 +286,7 @@ func makePutOperation(modelName string, model *Model, upstreamParams []*Property
 		Message:       "Successfully updated",
 		ResponseModel: modelName,
 	}
-	putOp.ResponseMessages = append(commonResponseCodes, putResp)
+	putOp.ResponseMessages = append(getCommonResponseCodes(), putResp)
 
 	// The put body
 	bodyParam := &Property{
@@ -315,7 +316,7 @@ func makePostOperation(modelName string, model *Model, upstreamParams []*Propert
 		Message:       "Successfully created",
 		ResponseModel: modelName,
 	}
-	postOp.ResponseMessages = append(commonResponseCodes, postResp)
+	postOp.ResponseMessages = append(getCommonResponseCodes(), postResp)
 
 	// Post body to create the new model.
 	bodyParam := &Property{
@@ -346,10 +347,10 @@ func makeCollectionOperation(modelName string, model *Model, upstreamParams []*P
 		Message:       "Successful Lookup",
 		ResponseModel: modelName + strings.Title(ContainerName),
 	}
-	getOp.ResponseMessages = append(commonResponseCodes, getResp)
+	getOp.ResponseMessages = append(getCommonResponseCodes(), getResp)
 
 	// add the parameters
-	getOp.Parameters = commonGetParams
+	getOp.Parameters = getCommonGetParams()
 	for propName, prop := range model.Properties {
 		//fmt.Println(propName, prop)
 		switch prop.Type {
