@@ -1,4 +1,4 @@
-package swagger_gen
+package dragonfruit
 
 import (
 	"github.com/go-martini/martini"

@@ -1,4 +1,4 @@
-package swagger_gen
+package dragonfruit
 
 import (
 	"encoding/json"
@@ -138,5 +138,6 @@ func addOperation(api *Api,
 
 func translatePath(path string, basepath string) (outpath string) {
 	outpath = basepath + PathRe.ReplaceAllString(path, "/$2/:$4")
+	fmt.Println("outpath: ", outpath)
 	return
 }
