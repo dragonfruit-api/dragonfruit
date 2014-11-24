@@ -39,7 +39,10 @@ func ServeDocSet(db Db_backend) {
 		panic(err)
 	}
 
-	m.Get("/api-docs", func() (int, string) {
+	m.Get("/api-docs", func(res http.ResponseWriter) (int, string) {
+		h := res.Header()
+
+		h.Add("Content-Type", "application/json")
 		docs, err := json.Marshal(rd)
 		if err != nil {
 			return 400, err.Error()
@@ -48,6 +51,7 @@ func ServeDocSet(db Db_backend) {
 		return 200, string(docs)
 	})
 	for _, res := range rd.APIs {
+		fmt.Println(res.Path)
 		NewDocFromSummary(res, db)
 	}
 
@@ -64,18 +68,21 @@ func ServeDocSet(db Db_backend) {
 }
 
 func NewDocFromSummary(r *ResourceSummary, db Db_backend) {
-	res, err := LoadResourceFromDb(db, strings.TrimLeft(r.Path, "/"), "resourceTemplate.json")
+	resp, err := LoadResourceFromDb(db, strings.TrimLeft(r.Path, "/"), "resourceTemplate.json")
 	if err != nil {
 		panic(err)
 	}
-	m.Get("/api-docs"+r.Path, func() (int, string) {
-		doc, err := json.Marshal(res)
+	m.Get("/api-docs"+r.Path, func(res http.ResponseWriter) (int, string) {
+		h := res.Header()
+
+		h.Add("Content-Type", "application/json")
+		doc, err := json.Marshal(resp)
 		if err != nil {
 			return 400, err.Error()
 		}
 		return 200, string(doc)
 	})
-	NewApiFromSpec(res)
+	NewApiFromSpec(resp)
 }
 
 func NewApiFromSpec(resource *Resource) {
