@@ -69,6 +69,9 @@ func appendSubtype(baseSubtype string, m map[string]*Model) string {
 			Ref: baseSubtype,
 		},
 	}
+	m[subtype].Properties["type"] = &Property{
+		Type: "string",
+	}
 	return subtype
 }
 

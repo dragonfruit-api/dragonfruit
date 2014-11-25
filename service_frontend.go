@@ -51,19 +51,8 @@ func ServeDocSet(db Db_backend) {
 		return 200, string(docs)
 	})
 	for _, res := range rd.APIs {
-		fmt.Println(res.Path)
 		NewDocFromSummary(res, db)
 	}
-
-	/*m.Group("/api-docs",
-		func(r martini.Router) {
-			r.Get("",
-				func(db Db_backend) (int, string) {
-					fmt.Println(db)
-					return 200, "yeap"
-				})
-		})
-	m.Get("api-docs")*/
 
 }
 
@@ -118,11 +107,13 @@ func addOperation(api *Api,
 
 			result, err := db.Query(q)
 			if err != nil {
-				return 500, err.Error()
+				outerr, _ := json.Marshal(err.Error())
+				return 500, string(outerr)
 			}
 			out, err := json.Marshal(result)
 			if err != nil {
-				return 500, err.Error()
+				outerr, _ := json.Marshal(err.Error())
+				return 500, string(outerr)
 			}
 			return 200, string(out)
 		})
@@ -140,7 +131,28 @@ func addOperation(api *Api,
 			}
 			doc, err := db.Insert(q)
 			if err != nil {
-				return 500, err.Error()
+				outerr, _ := json.Marshal(err.Error())
+				return 500, string(outerr)
+			}
+			out, err := json.Marshal(doc)
+			return 200, string(out)
+		})
+		break
+	case "PUT":
+		m.Put(path, func(params martini.Params, req *http.Request, db Db_backend, res http.ResponseWriter) (int, string) {
+			h := res.Header()
+
+			h.Add("Content-Type", "application/json")
+			val, err := ioutil.ReadAll(req.Body)
+			q := QueryParams{
+				Path:       api.Path,
+				PathParams: params,
+				Body:       val,
+			}
+			doc, err := db.Update(q)
+			if err != nil {
+				outerr, _ := json.Marshal(err.Error())
+				return 500, string(outerr)
 			}
 			out, err := json.Marshal(doc)
 			return 200, string(out)
@@ -156,7 +168,11 @@ func addOperation(api *Api,
 				PathParams: params,
 			}
 			err := db.Remove(q)
-			return 200, fmt.Sprint(err)
+			if err != nil {
+				outerr, _ := json.Marshal(err.Error())
+				return 500, string(outerr)
+			}
+			return 200, ""
 		})
 		break
 	}

@@ -2,7 +2,7 @@ package dragonfruit
 
 import (
 	"encoding/json"
-	"fmt"
+	//"fmt"
 	"github.com/gedex/inflector"
 	"io/ioutil"
 	"strings"
@@ -340,7 +340,7 @@ func makePostOperation(modelName string, model *Model, upstreamParams []*Propert
 
 // Create a GET operation for collections of the model and associated filters
 func makeCollectionOperation(modelName string, model *Model, upstreamParams []*Property) (getOp *Operation) {
-	fmt.Println(modelName, model)
+	//	fmt.Println(modelName, model)
 	getOp = &Operation{
 		Method:   "GET",
 		Type:     modelName + strings.Title(ContainerName),

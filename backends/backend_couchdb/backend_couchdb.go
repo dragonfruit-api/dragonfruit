@@ -62,34 +62,24 @@ func (d *Db_backend_couch) Prep(database string, resource *dragonfruit.Resource)
 	id := "_design/core"
 	vd.Id = id
 	vd.Views = make(map[string]view)
-	//revstring, reverror := d.client.DB(database).Rev(id)
-	//fmt.Println("rev string and error", vd, id)
 	dbz, err := d.client.EnsureDB(database)
-	//fmt.Println(err)
 	if err != nil {
 		// do something here
 	}
 
 	err = dbz.Get(id, &vd, nil)
-	//fmt.Println(err)
 
 	vd.Language = "javascript"
-
-	//fmt.Println("loaded vd:", vd)
-	//primaryModel := modelizePath(database)
 
 	// well this is ugly...
 	for _, api := range resource.Apis {
 		for _, operation := range api.Operations {
-			//operationType := modelizeContainer(operation.Type)
-			//bl := (primaryModel == operationType)
 			if operation.Method == "GET" {
 				vd.makePathParamView(api, operation, resource)
 			}
 
 		}
 	}
-	//fmt.Println("ready vd:", vd)
 	d.Save(database, id, vd)
 }
 
@@ -184,7 +174,6 @@ func (vd *viewDoc) makePathParamView(api *dragonfruit.Api, op *dragonfruit.Opera
 
 func makePathViewName(path string) string {
 	matches := dragonfruit.ViewPathRe.FindAllStringSubmatch(path, -1)
-	//fmt.Println("path view matches:", matches)
 	out := make([]string, 0)
 
 	for _, match := range matches {
@@ -197,12 +186,9 @@ func makePathViewName(path string) string {
 }
 
 func findPropertyFromPath(model string, path string, resource *dragonfruit.Resource) (string, *dragonfruit.Property) {
-	//fmt.Println(model)
 	m, ok := resource.Models[model]
-	//fmt.Println("found model: ", m)
 	if ok {
 		for k, v := range m.Properties {
-			//fmt.Println("search: ", k, path)
 			if strings.ToLower(k) == strings.ToLower(path) {
 				return k, v
 			}
@@ -228,12 +214,38 @@ func getDatabaseName(params dragonfruit.QueryParams) (database string) {
 	return
 }
 
+func (d *Db_backend_couch) Update(params dragonfruit.QueryParams) (interface{}, error) {
+	database := getDatabaseName(params)
+	result, err := d.queryView(params)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(result.Rows) == 0 {
+		return nil, errors.New("not found error")
+	}
+
+	var document map[string]interface{}
+	err = json.Unmarshal(params.Body, &document)
+	if err != nil {
+		return nil, err
+	}
+	documentId := result.Rows[0].Id
+
+	_, out, err := d.Save(database, documentId, document)
+
+	return out, err
+
+}
+
 func (d *Db_backend_couch) Insert(params dragonfruit.QueryParams) (interface{}, error) {
 	database := getDatabaseName(params)
 	var document map[string]interface{}
-	json.Unmarshal(params.Body, &document)
+	err := json.Unmarshal(params.Body, &document)
+	if err != nil {
+		return nil, err
+	}
 	_, doc, err := d.Save(database, uuid.New(), document)
-	//fmt.Println(docId)
 
 	return doc, err
 

@@ -52,6 +52,7 @@ type Db_backend interface {
 	Query(QueryParams) (interface{}, error)
 
 	//
+	Update(QueryParams) (interface{}, error)
 
 	Insert(QueryParams) (interface{}, error)
 
