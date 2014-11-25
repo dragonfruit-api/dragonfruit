@@ -267,6 +267,7 @@ func makePatchOperation(modelName string, model *Model, upstreamParams []*Proper
 		ParamType: "body",
 		Ref:       modelName,
 		Required:  true,
+		Type:      modelName,
 	}
 
 	patchOp.Parameters = append(patchOp.Parameters, bodyParam)
@@ -298,6 +299,7 @@ func makePutOperation(modelName string, model *Model, upstreamParams []*Property
 		ParamType: "body",
 		Ref:       modelName,
 		Required:  true,
+		Type:      modelName,
 	}
 
 	putOp.Parameters = append(putOp.Parameters, bodyParam)
@@ -328,6 +330,7 @@ func makePostOperation(modelName string, model *Model, upstreamParams []*Propert
 		ParamType: "body",
 		Ref:       modelName,
 		Required:  true,
+		Type:      modelName,
 	}
 	postOp.Parameters = append(postOp.Parameters, bodyParam)
 	postOp.Parameters = append(postOp.Parameters, upstreamParams...)
