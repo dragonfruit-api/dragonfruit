@@ -2,7 +2,7 @@ package dragonfruit
 
 import (
 	"encoding/json"
-	"fmt"
+
 	"github.com/go-martini/martini"
 	"io/ioutil"
 	"net/http"
