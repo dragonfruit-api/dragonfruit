@@ -128,7 +128,10 @@ func addOperation(api *Api,
 		})
 		break
 	case "POST":
-		m.Post(path, func(params martini.Params, req *http.Request, db Db_backend) (int, string) {
+		m.Post(path, func(params martini.Params, req *http.Request, db Db_backend, res http.ResponseWriter) (int, string) {
+			h := res.Header()
+
+			h.Add("Content-Type", "application/json")
 			val, err := ioutil.ReadAll(req.Body)
 			q := QueryParams{
 				Path:       api.Path,
@@ -136,11 +139,18 @@ func addOperation(api *Api,
 				Body:       val,
 			}
 			doc, err := db.Insert(q)
-			return 200, fmt.Sprint(doc) + fmt.Sprint(err)
+			if err != nil {
+				return 500, err.Error()
+			}
+			out, err := json.Marshal(doc)
+			return 200, string(out)
 		})
 		break
 	case "DELETE":
-		m.Delete(path, func(params martini.Params, db Db_backend) (int, string) {
+		m.Delete(path, func(params martini.Params, db Db_backend, res http.ResponseWriter) (int, string) {
+			h := res.Header()
+
+			h.Add("Content-Type", "application/json")
 			q := QueryParams{
 				Path:       api.Path,
 				PathParams: params,
