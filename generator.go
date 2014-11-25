@@ -2,7 +2,7 @@ package dragonfruit
 
 import (
 	"encoding/json"
-	//"fmt"
+	"fmt"
 	"github.com/gedex/inflector"
 	"io/ioutil"
 	"strings"
@@ -141,17 +141,19 @@ func makeSubApis(
 ) []*Api {
 	out := make([]*Api, 0)
 	for _, prop := range model.Properties {
-		subModelName := strings.Replace(prop.Ref, strings.Title(ContainerName), "", -1)
-		resourceroot := strings.ToLower(inflector.Pluralize(inflector.Singularize(subModelName)))
 
 		// make APIs out of any container types
-		if strings.Contains(prop.Ref, strings.Title(ContainerName)) {
-			out = append(out, MakeCommonAPIs(prefix, resourceroot, subModelName, modelMap, upstreamParams)...)
-		}
+		//if strings.Contains(prop.Ref, strings.Title(ContainerName)) {
+
+		//}
 
 		// TODO - HANDLE SUB-APIS FOR ARRAYS
 		if prop.Type == "array" {
-
+			if prop.Items.Ref != "" {
+				subModelName := prop.Items.Ref
+				resourceroot := strings.ToLower(inflector.Pluralize(inflector.Singularize(subModelName)))
+				out = append(out, MakeCommonAPIs(prefix, resourceroot, subModelName, modelMap, upstreamParams)...)
+			}
 		}
 
 	}
@@ -162,26 +164,28 @@ func makeSubApis(
 func makePathId(model *Model) (propName string, idparam *Property) {
 	// find a property with "ID" in the name
 	for propName, propValue := range model.Properties {
-		if propName == "id" {
-			idparam = &Property{
-				Name:      propName,
-				Type:      propValue.Type,
-				ParamType: "path",
-				Format:    propValue.Format,
-				Required:  true,
+		if propValue.Type != "array" && propValue.Ref == "" {
+			if propName == "id" {
+				idparam = &Property{
+					Name:      propName,
+					Type:      propValue.Type,
+					ParamType: "path",
+					Format:    propValue.Format,
+					Required:  true,
+				}
+				return propName, idparam
 			}
-			return propName, idparam
-		}
 
-		if strings.Contains(propName, "Id") && propValue.Type != "" {
-			idparam = &Property{
-				Name:      propName,
-				Type:      propValue.Type,
-				ParamType: "path",
-				Format:    propValue.Format,
-				Required:  true,
+			if strings.Contains(propName, "Id") && propValue.Type != "" {
+				idparam = &Property{
+					Name:      propName,
+					Type:      propValue.Type,
+					ParamType: "path",
+					Format:    propValue.Format,
+					Required:  true,
+				}
+				return propName, idparam
 			}
-			return propName, idparam
 		}
 	}
 
@@ -333,7 +337,7 @@ func makePostOperation(modelName string, model *Model, upstreamParams []*Propert
 
 // Create a GET operation for collections of the model and associated filters
 func makeCollectionOperation(modelName string, model *Model, upstreamParams []*Property) (getOp *Operation) {
-
+	fmt.Println(modelName, model)
 	getOp = &Operation{
 		Method:   "GET",
 		Type:     modelName + strings.Title(ContainerName),
@@ -366,8 +370,10 @@ func makeCollectionOperation(modelName string, model *Model, upstreamParams []*P
 			break
 		// arrays query against their type
 		case "array":
-			param := makeArrayParam(propName, prop)
-			getOp.Parameters = append(getOp.Parameters, param)
+			if prop.Items.Type != "" {
+				param := makeArrayParam(propName, prop)
+				getOp.Parameters = append(getOp.Parameters, param)
+			}
 			break
 		// ints and numbers...
 		case "number":

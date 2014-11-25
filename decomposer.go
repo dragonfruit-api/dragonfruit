@@ -207,9 +207,11 @@ func (prop *Property) buildSliceProperty(name string, i *ItemsRef, v reflect.Val
 		datatype, sanitized := translateKind(v.Index(it))
 		switch datatype {
 		case "model":
-			i.Ref = name
+			prop.Type = "array"
 			buildModel(name, m, sanitized)
-			prop.Ref = appendSubtype(name, m)
+			appendSubtype(name, m)
+			prop.Items = &ItemsRef{} //appendSubtype(name, m)
+			prop.Items.Ref = strings.Title(name)
 			break
 		default:
 			prop.Type = "array"
