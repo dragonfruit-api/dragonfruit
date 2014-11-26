@@ -30,7 +30,7 @@ func Decompose(sampledata []byte, baseType string) (m map[string]*Model, err err
 	err = json.Unmarshal(byt, &basecontaners)
 
 	m = make(map[string]*Model)
-	m[ContainerName] = basecontaners[0]
+	m[strings.Title(ContainerName)] = basecontaners[0]
 	m["Metalist"] = basecontaners[1]
 
 	appendSubtype(baseType, m)
@@ -51,14 +51,16 @@ func appendSubtype(baseSubtype string, m map[string]*Model) string {
 
 	subtype := strings.Title(baseSubtype + strings.Title(ContainerName))
 
+	cname := strings.Title(ContainerName)
+
 	//ugh
-	for _, v := range m[ContainerName].SubTypes {
+	for _, v := range m[cname].SubTypes {
 		if subtype == v {
 			return subtype
 		}
 	}
 
-	m[ContainerName].SubTypes = append(m[ContainerName].SubTypes, subtype)
+	m[cname].SubTypes = append(m[cname].SubTypes, subtype)
 	m[subtype] = new(Model)
 	m[subtype].Id = subtype
 	m[subtype].Description = "A container for " + inflector.Pluralize(baseSubtype)
@@ -68,9 +70,6 @@ func appendSubtype(baseSubtype string, m map[string]*Model) string {
 		Items: &ItemsRef{
 			Ref: baseSubtype,
 		},
-	}
-	m[subtype].Properties["type"] = &Property{
-		Type: "string",
 	}
 	return subtype
 }

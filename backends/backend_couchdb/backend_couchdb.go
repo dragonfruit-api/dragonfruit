@@ -305,7 +305,7 @@ func (d *Db_backend_couch) Query(params dragonfruit.QueryParams) (interface{}, e
 	c.Meta.Offset = result.Offset
 	c.Meta.ResponseCode = 200
 	c.Meta.ResponseMessage = "Ok."
-	c.Type = strings.Title(returnType + strings.Title(dragonfruit.ContainerName))
+	c.ContainerType = strings.Title(returnType + strings.Title(dragonfruit.ContainerName))
 	for _, row := range result.Rows {
 		c.Results = append(c.Results, row.Value)
 	}

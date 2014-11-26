@@ -27,9 +27,9 @@ type ContainerMeta struct {
 }
 
 type Container struct {
-	Meta    ContainerMeta `json:"meta,omitempty"`
-	Type    string        `json:"type"`
-	Results []interface{} `json:"results"`
+	Meta          ContainerMeta `json:"meta,omitempty"`
+	ContainerType string        `json:"containerType"`
+	Results       []interface{} `json:"results"`
 }
 
 type Db_backend interface {
