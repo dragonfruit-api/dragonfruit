@@ -340,7 +340,6 @@ func makePostOperation(modelName string, model *Model, upstreamParams []*Propert
 
 // Create a GET operation for collections of the model and associated filters
 func makeCollectionOperation(modelName string, model *Model, upstreamParams []*Property) (getOp *Operation) {
-	//	fmt.Println(modelName, model)
 	getOp = &Operation{
 		Method:   "GET",
 		Type:     modelName + strings.Title(ContainerName),
@@ -359,7 +358,6 @@ func makeCollectionOperation(modelName string, model *Model, upstreamParams []*P
 	// add the parameters
 	getOp.Parameters = getCommonGetParams()
 	for propName, prop := range model.Properties {
-		//fmt.Println(propName, prop)
 		switch prop.Type {
 		// if there is no type, the item is a ref
 		// don't add any properties...
@@ -406,7 +404,6 @@ func makeArrayParam(propName string, prop *Property) (pr *Property) {
 }
 
 func makeNumParams(propName string, prop *Property) (p []*Property) {
-	//fmt.Println(prop.Minimum, prop.Maximum)
 	pr := Property{
 		Type:      prop.Type,
 		Minimum:   prop.Minimum,

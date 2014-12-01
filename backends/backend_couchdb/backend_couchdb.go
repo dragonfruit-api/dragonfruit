@@ -5,10 +5,11 @@ import (
 	"code.google.com/p/go-uuid/uuid"
 	"encoding/json"
 	"errors"
-	//"fmt"
+	//	"fmt"
 	"github.com/fjl/go-couchdb"
 	"github.com/gedex/inflector"
 	"github.com/ideo/dragonfruit"
+	"strconv"
 	"strings"
 )
 
@@ -47,6 +48,7 @@ type couchDbResponse struct {
 	Rows      []couchdbRow `json:"rows"`
 	Offset    int          `json:"offset"`
 	TotalRows int          `json:"total_rows"`
+	Limit     int          `json:"-"`
 }
 
 func modelizePath(modelName string) string {
@@ -57,7 +59,7 @@ func modelizeContainer(container string) string {
 	return strings.Replace(container, strings.Title(dragonfruit.ContainerName), "", -1)
 }
 
-func (d *Db_backend_couch) Prep(database string, resource *dragonfruit.Resource) {
+func (d *Db_backend_couch) Prep(database string, resource *dragonfruit.Resource) error {
 	vd := viewDoc{}
 	id := "_design/core"
 	vd.Id = id
@@ -65,6 +67,7 @@ func (d *Db_backend_couch) Prep(database string, resource *dragonfruit.Resource)
 	dbz, err := d.client.EnsureDB(database)
 	if err != nil {
 		// do something here
+		return err
 	}
 
 	err = dbz.Get(id, &vd, nil)
@@ -76,17 +79,42 @@ func (d *Db_backend_couch) Prep(database string, resource *dragonfruit.Resource)
 		for _, operation := range api.Operations {
 			if operation.Method == "GET" {
 				vd.makePathParamView(api, operation, resource)
+				vd.makeQueryParamView(api, operation, resource)
 			}
 
 		}
 	}
 	d.Save(database, id, vd)
+	return nil
 }
 
-func (vd *viewDoc) makePathParamView(api *dragonfruit.Api, op *dragonfruit.Operation, resource *dragonfruit.Resource) {
+func (vd *viewDoc) makeQueryParamView(api *dragonfruit.Api,
+	op *dragonfruit.Operation,
+	resource *dragonfruit.Resource) {
+	responseModel := strings.Replace(op.Type, strings.Title(dragonfruit.ContainerName), "", -1)
+	model := resource.Models[responseModel]
+	for _, param := range op.Parameters {
+		if param.ParamType == "query" {
+			for propname, prop := range model.Properties {
+				if param.Name == propname {
+					if prop.Type != "array" {
+						viewname := makeQueryViewName(param.Name)
+						vw := view{}
+						vw.MapFunc = "function(doc){ emit(doc." + propname + ",doc); }"
+						vd.Add(viewname, vw)
+					}
+
+				}
+			}
+		}
+	}
+}
+
+func (vd *viewDoc) makePathParamView(api *dragonfruit.Api,
+	op *dragonfruit.Operation,
+	resource *dragonfruit.Resource) {
 	matches := dragonfruit.PathRe.FindAllStringSubmatch(api.Path, -1)
 	viewname := makePathViewName(api.Path)
-	//fmt.Println("matches: ", api.Path, len(matches), matches)
 
 	if len(matches) == 1 {
 		// regex voodoo
@@ -111,7 +139,6 @@ func (vd *viewDoc) makePathParamView(api *dragonfruit.Api, op *dragonfruit.Opera
 		}
 
 		for _, path := range matches[1:] {
-			//fmt.Println("searching for:", model, path[2])
 			propertyname, property := findPropertyFromPath(model, path[2], resource)
 			p := viewParam{
 				path:         path[2],
@@ -172,6 +199,10 @@ func (vd *viewDoc) makePathParamView(api *dragonfruit.Api, op *dragonfruit.Opera
 
 }
 
+func makeQueryViewName(param string) string {
+	return "by_query_" + param
+}
+
 func makePathViewName(path string) string {
 	matches := dragonfruit.ViewPathRe.FindAllStringSubmatch(path, -1)
 	out := make([]string, 0)
@@ -216,7 +247,7 @@ func getDatabaseName(params dragonfruit.QueryParams) (database string) {
 
 func (d *Db_backend_couch) Update(params dragonfruit.QueryParams) (interface{}, error) {
 	database := getDatabaseName(params)
-	result, err := d.queryView(params)
+	_, result, err := d.queryView(params)
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +283,7 @@ func (d *Db_backend_couch) Insert(params dragonfruit.QueryParams) (interface{}, 
 }
 
 func (d *Db_backend_couch) Remove(params dragonfruit.QueryParams) error {
-	result, err := d.queryView(params)
+	_, result, err := d.queryView(params)
 	if err != nil {
 		return err
 	}
@@ -281,27 +312,23 @@ func (d *Db_backend_couch) Save(database string,
 	db, err := d.client.EnsureDB(database)
 
 	rev, err := db.Rev(documentId)
-	//fmt.Println("reverr", rev, err)
-	/*if err != nil {
-		fmt.Println("this is the error", err, rev)
-		return "", nil, err
-	}*/
 
 	_, err = db.Put(documentId, document, rev)
-	//fmt.Println("save error: ", err)
 
 	return documentId, document, err
 }
 
 func (d *Db_backend_couch) Query(params dragonfruit.QueryParams) (interface{}, error) {
-
-	result, err := d.queryView(params)
+	num, result, err := d.queryView(params)
+	if err != nil {
+		return nil, err
+	}
 
 	returnType := makeTypeName(params.Path)
 
 	c := dragonfruit.Container{}
 	c.Meta.Count = len(result.Rows)
-	c.Meta.Total = result.TotalRows
+	c.Meta.Total = num
 	c.Meta.Offset = result.Offset
 	c.Meta.ResponseCode = 200
 	c.Meta.ResponseMessage = "Ok."
@@ -313,42 +340,107 @@ func (d *Db_backend_couch) Query(params dragonfruit.QueryParams) (interface{}, e
 	return c, err
 }
 
-func (d *Db_backend_couch) queryView(params dragonfruit.QueryParams) (couchDbResponse, error) {
+func (d *Db_backend_couch) queryView(params dragonfruit.QueryParams) (int, couchDbResponse, error) {
 	var (
 		result couchDbResponse
 		err    error
 	)
+	opts := make(map[string]interface{})
 
-	dbp := dragonfruit.GetDbRe.FindStringSubmatch(params.Path)
+	database := getDatabaseName(params)
 
-	database := dbp[1]
+	limit, offset := setLimitAndOffset(params)
+
+	if limit < 1 {
+		return 0, couchDbResponse{}, errors.New("Limit must be greater than 0")
+	}
 
 	db := d.client.DB(database)
-	opts := make(map[string]interface{})
-	viewName, ok := pathView(params, opts)
+	viewName, ok := d.pickView(params, opts, limit, offset)
 
 	if ok {
 		err = db.View("_design/core", viewName, &result, opts)
 	} else {
 		opts["include_docs"] = true
 		err = db.AllDocs(&result, opts)
-		//fmt.Println(result)
 	}
-	return result, err
+
+	totalResults := result.TotalRows
+
+	if len(params.QueryParams) > 0 {
+		totalResults, result, err = filterResultSet(result, params, limit, offset)
+	}
+
+	return totalResults, result, err
+}
+
+func setLimitAndOffset(params dragonfruit.QueryParams) (limit int64, offset int64) {
+	limit, offset = 10, 0
+
+	l := params.QueryParams.Get("limit")
+
+	if l != "" {
+		num, err := strconv.ParseInt(l, 10, 0)
+		if err == nil {
+			limit = num
+		}
+		params.QueryParams.Del("limit")
+	}
+
+	o := params.QueryParams.Get("offset")
+	if o != "" {
+		num, err := strconv.ParseInt(o, 10, 0)
+		if err == nil {
+			offset = num
+		}
+		params.QueryParams.Del("offset")
+	}
+
+	return
+}
+
+func filterResultSet(result couchDbResponse,
+	params dragonfruit.QueryParams,
+	limit int64, offset int64) (int, couchDbResponse, error) {
+	if len(params.QueryParams) < 1 {
+		return len(result.Rows), result, nil
+	}
+	outResult := result
+
+	outResult.Rows = make([]couchdbRow, 0)
+	for _, v := range result.Rows {
+		for queryParam := range params.QueryParams {
+
+			val, ok := v.Value[queryParam]
+			if ok && (params.QueryParams.Get(queryParam) == val) {
+				/*switch val.(type) {}*/
+
+				outResult.Rows = append(outResult.Rows, v)
+			}
+		}
+	}
+	totalNum := len(outResult.Rows)
+	if int(offset) > totalNum {
+		outResult.Rows = make([]couchdbRow, 0, 0)
+	} else if int(limit+offset) > len(outResult.Rows) {
+		outResult.Rows = outResult.Rows[offset:len(outResult.Rows)]
+	} else {
+		outResult.Rows = outResult.Rows[offset:(offset + limit)]
+	}
+
+	return totalNum, outResult, nil
 }
 
 func (d *Db_backend_couch) Load(database string, documentId string, doc interface{}) error {
-	//fmt.Println(database)
 	db, err := d.client.EnsureDB(database)
 	if err != nil {
 		return err
 	}
 
-	//var doc interface{}
 	// mutate the doc
 	err = db.Get(documentId, doc, nil)
 	if err != nil {
-		//fmt.Println("~~~~~~~~~~~~~~~~~~~", err)
+		return err
 	}
 
 	return err
@@ -359,14 +451,34 @@ func (vd *viewDoc) Add(viewname string, v view) {
 }
 
 // this MUTATES the opts parameter, be careful
-func pathView(params dragonfruit.QueryParams, opts map[string]interface{}) (string, bool) {
+func (d *Db_backend_couch) pickView(params dragonfruit.QueryParams,
+	opts map[string]interface{},
+	limit int64,
+	offset int64) (string, bool) {
 	// use all docs or a view query
 
 	viewName := makePathViewName(params.Path)
 	viewMatches := dragonfruit.ViewPathRe.FindAllStringSubmatch(params.Path, -1)
 	if len(params.PathParams) == 0 {
+		if len(params.QueryParams) > 0 {
+			queryView, ok := d.findQueryView(params, opts)
+			if ok {
+				if len(params.QueryParams) == 0 {
+					opts["limit"] = limit
+					opts["skip"] = offset
+				}
+				return queryView, true
+			}
+		}
+		opts["limit"] = limit
+		opts["skip"] = offset
 
 		return viewName, true
+	}
+
+	if len(params.QueryParams) == 0 {
+		opts["limit"] = limit
+		opts["skip"] = offset
 	}
 
 	// use a non-array key
@@ -388,11 +500,8 @@ func pathView(params dragonfruit.QueryParams, opts map[string]interface{}) (stri
 		}
 	}
 
-	//matches := pathRe.FindAllStringSubmatch(params.path, -1)
 	key := make([]interface{}, 0)
-	//	fmt.Println(params.PathParams)
 	for _, param := range params.PathParams {
-		//		fmt.Println(param, 0, "0")
 
 		key = append(key, param)
 	}
@@ -405,6 +514,35 @@ func pathView(params dragonfruit.QueryParams, opts map[string]interface{}) (stri
 	}
 	return viewName, true
 
+}
+
+// this also mutates opts
+func (d *Db_backend_couch) findQueryView(params dragonfruit.QueryParams, opts map[string]interface{}) (string, bool) {
+	var vd viewDoc
+	//d.L
+	database := getDatabaseName(params)
+	err := d.Load(database, "_design/core", &vd)
+	if err != nil {
+		panic(err)
+	}
+	for queryParam, queryValue := range params.QueryParams {
+		isRange := strings.Contains(queryParam, "Range")
+		if isRange {
+			queryParam = strings.Replace(queryParam, "Range", "", -1)
+		}
+		_, exists := vd.Views[makeQueryViewName(queryParam)]
+		if exists {
+			if isRange {
+				opts["startKey"] = queryValue[0]
+				opts["endKey"] = queryValue[(len(queryValue) - 1)]
+			} else {
+				opts["key"] = params.QueryParams.Get(queryParam)
+			}
+			params.QueryParams.Del(queryParam)
+			return makeQueryViewName(queryParam), true
+		}
+	}
+	return "", false
 }
 
 // just don't ask....

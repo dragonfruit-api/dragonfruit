@@ -37,14 +37,15 @@ type ResourceSummary struct {
 }
 
 type Property struct {
-	Type        string    `json:"type,omitempty"`
-	Ref         string    `json:"$ref,omitempty"`
-	Format      string    `json:"format,omitempty"`
-	Enum        []string  `json:"enum,omitempty"`
-	Minimum     float64   `json:"minimum,string,omitempty"`
-	Maximum     float64   `json:"maximum,string,omitempty"`
-	Items       *ItemsRef `json:"items,omitempty"`
-	UniqueItems bool      `json:"uniqueItems,omitempty"`
+	Type         string      `json:"type,omitempty"`
+	Ref          string      `json:"$ref,omitempty"`
+	Format       string      `json:"format,omitempty"`
+	Enum         []string    `json:"enum,omitempty"`
+	Minimum      float64     `json:"minimum,string,omitempty"`
+	Maximum      float64     `json:"maximum,string,omitempty"`
+	Items        *ItemsRef   `json:"items,omitempty"`
+	UniqueItems  bool        `json:"uniqueItems,omitempty"`
+	DefaultValue interface{} `json:"defaultValue,omitempty"`
 	// parameters fields -
 	// properties and params share a bunch of fields
 	ParamType     string `json:"paramType,omitempty"`

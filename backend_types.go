@@ -58,5 +58,5 @@ type Db_backend interface {
 
 	Remove(QueryParams) error
 
-	Prep(string, *Resource)
+	Prep(string, *Resource) error
 }
