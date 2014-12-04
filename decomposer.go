@@ -104,7 +104,7 @@ func buildProperty(propName string,
 	switch datatype {
 	case "model":
 		prop := &Property{
-			Ref: propName,
+			Ref: strings.Title(propName),
 		}
 		buildModel(propName, models, sanitized)
 		models[modelName].Properties[propName] = prop
