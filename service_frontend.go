@@ -42,7 +42,7 @@ func ServeDocSet(db Db_backend) {
 	m.Get("/api-docs", func(res http.ResponseWriter) (int, string) {
 		h := res.Header()
 
-		h.Add("Content-Type", "application/json")
+		h.Add("Content-Type", "application/json;charset=utf-8")
 		docs, err := json.Marshal(rd)
 		if err != nil {
 			return 400, err.Error()
@@ -64,7 +64,7 @@ func NewDocFromSummary(r *ResourceSummary, db Db_backend) {
 	m.Get("/api-docs"+r.Path, func(res http.ResponseWriter) (int, string) {
 		h := res.Header()
 
-		h.Add("Content-Type", "application/json")
+		h.Add("Content-Type", "application/json;charset=utf-8")
 		doc, err := json.Marshal(resp)
 		if err != nil {
 			return 400, err.Error()
@@ -96,7 +96,7 @@ func addOperation(api *Api,
 		m.Get(path, func(params martini.Params, req *http.Request, db Db_backend, res http.ResponseWriter) (int, string) {
 			h := res.Header()
 
-			h.Add("Content-Type", "application/json")
+			h.Add("Content-Type", "application/json;charset=utf-8")
 			req.ParseForm()
 
 			q := QueryParams{
@@ -122,7 +122,7 @@ func addOperation(api *Api,
 		m.Post(path, func(params martini.Params, req *http.Request, db Db_backend, res http.ResponseWriter) (int, string) {
 			h := res.Header()
 
-			h.Add("Content-Type", "application/json")
+			h.Add("Content-Type", "application/json;charset=utf-8")
 			val, err := ioutil.ReadAll(req.Body)
 			q := QueryParams{
 				Path:       api.Path,
@@ -142,7 +142,7 @@ func addOperation(api *Api,
 		m.Put(path, func(params martini.Params, req *http.Request, db Db_backend, res http.ResponseWriter) (int, string) {
 			h := res.Header()
 
-			h.Add("Content-Type", "application/json")
+			h.Add("Content-Type", "application/json;charset=utf-8")
 			val, err := ioutil.ReadAll(req.Body)
 			q := QueryParams{
 				Path:       api.Path,
@@ -162,7 +162,7 @@ func addOperation(api *Api,
 		m.Delete(path, func(params martini.Params, db Db_backend, res http.ResponseWriter) (int, string) {
 			h := res.Header()
 
-			h.Add("Content-Type", "application/json")
+			h.Add("Content-Type", "application/json;charset=utf-8")
 			q := QueryParams{
 				Path:       api.Path,
 				PathParams: params,
