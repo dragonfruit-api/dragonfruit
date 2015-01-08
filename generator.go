@@ -2,7 +2,6 @@ package dragonfruit
 
 import (
 	"encoding/json"
-	//"fmt"
 	"github.com/gedex/inflector"
 	"io/ioutil"
 	"strings"
@@ -13,6 +12,8 @@ var (
 	commonGetParams     []*Property
 )
 
+// getCommonResponseCodes loads a set of response codes that most of the APIs
+// return.
 func getCommonResponseCodes() []*ResponseMessage {
 	if len(commonResponseCodes) < 1 {
 		commonResponseCodes = make([]*ResponseMessage, 0)
@@ -25,6 +26,8 @@ func getCommonResponseCodes() []*ResponseMessage {
 	return commonResponseCodes
 }
 
+// getCommonGetParams loads a set of common params that should be added to
+// all collection get operations (like limit and offset).
 func getCommonGetParams() []*Property {
 	if len(commonGetParams) < 1 {
 		commonGetParams = make([]*Property, 0)
@@ -37,7 +40,11 @@ func getCommonGetParams() []*Property {
 	return commonGetParams
 }
 
-func LoadDescriptionFromDb(db Db_backend, fallbackTemplate string) (*ResourceDescription, error) {
+// LoadDescriptionFromDb loads a resource description from a database backend.
+// (see the backend stuff and types).
+func LoadDescriptionFromDb(db Db_backend,
+	fallbackTemplate string) (*ResourceDescription, error) {
+
 	rd := new(ResourceDescription)
 	err := db.Load(SwaggerResourceDB, ResourceDescriptionName, rd)
 
@@ -50,8 +57,11 @@ func LoadDescriptionFromDb(db Db_backend, fallbackTemplate string) (*ResourceDes
 	return rd, err
 }
 
-func LoadResourceFromDb(db Db_backend, resourcePath string, fallbackTemplate string) (*Resource, error) {
-	//res, err := NewFromTemplate(fallbackTemplate)
+// LoadResourceFromDb loads a resource from a database backend
+// (see the backend stuff and types).
+func LoadResourceFromDb(db Db_backend,
+	resourcePath string, fallbackTemplate string) (*Resource, error) {
+
 	res := new(Resource)
 	err := db.Load(SwaggerResourceDB, ResourceStem+resourcePath, &res)
 
@@ -63,7 +73,7 @@ func LoadResourceFromDb(db Db_backend, resourcePath string, fallbackTemplate str
 	return res, err
 }
 
-// Create a new API resource from a template file
+// NewFromTemplate creates a new API resource from a template file.
 func NewFromTemplate(filePath string) (*Resource, error) {
 	res := new(Resource)
 	byt, err := ioutil.ReadFile(filePath)
@@ -72,8 +82,9 @@ func NewFromTemplate(filePath string) (*Resource, error) {
 	return res, err
 }
 
-// we'll be making 2 paths with a handful of
-// operations on each:
+// MakeCommonAPIs creates a set of operations and APIs for a model.
+// For any model passed to the function, two paths are created with the
+// following operations on each:
 // /{resourceRoot} (GET and POST)
 // /{resourceRoot}/{id} (GET, PUT, PATCH, DELETE)
 func MakeCommonAPIs(
@@ -128,42 +139,44 @@ func MakeCommonAPIs(
 
 	out = append(out, singleApi)
 
-	out = append(out, makeSubApis(singleApi.Path, model, modelMap, upstreamParams)...)
+	subApis := makeSubApis(singleApi.Path, model, modelMap, upstreamParams)
+	out = append(out, subApis...)
 
 	return out
 }
 
+// makeSubApis creates APIs for arrays of models which appear in models.
 func makeSubApis(
 	prefix string,
 	model *Model,
 	modelMap map[string]*Model,
 	upstreamParams []*Property,
 ) []*Api {
+
 	out := make([]*Api, 0)
 	for _, prop := range model.Properties {
+		// TODO - HANDLE SUB-APIS FOR ARRAYS OF PRIMITIVE VALUES
+		if (prop.Type == "array") && (prop.Items.Ref != "") {
+			subModelName := prop.Items.Ref
+			st := inflector.Pluralize(inflector.Singularize(subModelName))
+			resourceroot := strings.ToLower(st)
+			commonApis := MakeCommonAPIs(prefix, resourceroot, subModelName,
+				modelMap, upstreamParams)
 
-		// make APIs out of any container types
-		//if strings.Contains(prop.Ref, strings.Title(ContainerName)) {
-
-		//}
-
-		// TODO - HANDLE SUB-APIS FOR ARRAYS
-		if prop.Type == "array" {
-			if prop.Items.Ref != "" {
-				subModelName := prop.Items.Ref
-				resourceroot := strings.ToLower(inflector.Pluralize(inflector.Singularize(subModelName)))
-				out = append(out, MakeCommonAPIs(prefix, resourceroot, subModelName, modelMap, upstreamParams)...)
-			}
+			out = append(out, commonApis...)
 		}
-
 	}
 	return out
 }
 
-// Figure out what to use as an ID param
+// makePathId determines what property to use as the ID param when for paths
+// which have parameterized IDs (e.g. /model_name/{id}
 func makePathId(model *Model) (propName string, idparam *Property) {
 	// find a property with "ID" in the name
 	for propName, propValue := range model.Properties {
+
+		// The property must be a primitive value - it can't be an array
+		// or a reference to another model
 		if propValue.Type != "array" && propValue.Ref == "" {
 			if propName == "id" {
 				idparam = &Property{
@@ -200,7 +213,10 @@ func makePathId(model *Model) (propName string, idparam *Property) {
 	return "pos", idparam
 }
 
-func makeDeleteOperation(modelName string, model *Model, upstreamParams []*Property) (deleteOp *Operation) {
+// makeDeleteOperation creates operations to delete single instances of a model.
+func makeDeleteOperation(modelName string,
+	model *Model, upstreamParams []*Property) (deleteOp *Operation) {
+
 	deleteOp = &Operation{
 		Method:   "DELETE",
 		Type:     "void",
@@ -219,9 +235,10 @@ func makeDeleteOperation(modelName string, model *Model, upstreamParams []*Prope
 
 }
 
-// Get a single model
-func makeSingleGetOperation(modelName string, model *Model, upstreamParams []*Property) (patchOp *Operation) {
-	// Create the put operation
+// makeSingleGetOperation makes operations to load single instances of models.
+// Basically for URLs ending /{model id}.
+func makeSingleGetOperation(modelName string, model *Model,
+	upstreamParams []*Property) (patchOp *Operation) {
 
 	patchOp = &Operation{
 		Method:   "GET",
@@ -242,8 +259,9 @@ func makeSingleGetOperation(modelName string, model *Model, upstreamParams []*Pr
 	return
 }
 
-// Update models
-func makePatchOperation(modelName string, model *Model, upstreamParams []*Property) (patchOp *Operation) {
+// makePatchOperation creates operations to partially update models.
+func makePatchOperation(modelName string, model *Model,
+	upstreamParams []*Property) (patchOp *Operation) {
 	// Create the put operation
 
 	patchOp = &Operation{
@@ -261,7 +279,7 @@ func makePatchOperation(modelName string, model *Model, upstreamParams []*Proper
 	}
 	patchOp.ResponseMessages = append(getCommonResponseCodes(), putResp)
 
-	// The put body
+	// The patch body
 	bodyParam := &Property{
 		Name:      "body",
 		ParamType: "body",
@@ -275,8 +293,10 @@ func makePatchOperation(modelName string, model *Model, upstreamParams []*Proper
 	return
 }
 
-// Update models
-func makePutOperation(modelName string, model *Model, upstreamParams []*Property) (putOp *Operation) {
+// makePutOperation creates operations to update models.
+func makePutOperation(modelName string,
+	model *Model, upstreamParams []*Property) (putOp *Operation) {
+
 	// Create the put operation
 	putOp = &Operation{
 		Method:   "PUT",
@@ -307,8 +327,10 @@ func makePutOperation(modelName string, model *Model, upstreamParams []*Property
 	return
 }
 
-// Make a POST operation to create new models
-func makePostOperation(modelName string, model *Model, upstreamParams []*Property) (postOp *Operation) {
+// makePostOperation makes a POST operation to create new instances of models.
+func makePostOperation(modelName string,
+	model *Model, upstreamParams []*Property) (postOp *Operation) {
+
 	postOp = &Operation{
 		Method:   "POST",
 		Type:     modelName,
@@ -338,7 +360,8 @@ func makePostOperation(modelName string, model *Model, upstreamParams []*Propert
 
 }
 
-// Create a GET operation for collections of the model and associated filters
+// makeCollectionOperations defines GET calls for collections of the model.
+// Basically, GET operations on URLs ending with /
 func makeCollectionOperation(modelName string, model *Model, upstreamParams []*Property) (getOp *Operation) {
 	getOp = &Operation{
 		Method:   "GET",
@@ -372,8 +395,8 @@ func makeCollectionOperation(modelName string, model *Model, upstreamParams []*P
 		// arrays query against their type
 		case "array":
 			if prop.Items.Type != "" {
-				param := makeArrayParam(propName, prop)
-				getOp.Parameters = append(getOp.Parameters, param)
+				param := makeArrayParams(propName, prop)
+				getOp.Parameters = append(getOp.Parameters, param...)
 			}
 			break
 		// ints and numbers...
@@ -384,8 +407,8 @@ func makeCollectionOperation(modelName string, model *Model, upstreamParams []*P
 			break
 		// anything else (bools)
 		default:
-			param := makeGenParam(propName, prop)
-			getOp.Parameters = append(getOp.Parameters, param)
+			param := makeGenParams(propName, prop)
+			getOp.Parameters = append(getOp.Parameters, param...)
 		}
 	}
 	getOp.Parameters = append(getOp.Parameters, upstreamParams...)
@@ -393,18 +416,43 @@ func makeCollectionOperation(modelName string, model *Model, upstreamParams []*P
 	return
 }
 
-func makeArrayParam(propName string, prop *Property) (pr *Property) {
-	//fmt.Println("in func", propName, prop)
-	pr = new(Property)
-	pr.Name = propName
-	pr.Type = prop.Items.Type
-	pr.Format = prop.Items.Format
-	pr.ParamType = "query"
+/* The following make*Param functions look at Swagger model properties and
+translate them into query params for the APIs being generated. Swagger
+properties and params have the same structure so these functions return
+[]*Property. Some of the functions only return slices with a length of one, but
+slices are always returned to keep the API consistent. */
+
+// makeGenParam makes a generic parameter using the type, enum, name and
+// format of the property.
+func makeGenParams(propName string, prop *Property) (p []*Property) {
+	pr := &Property{
+		Type:      prop.Type,
+		Enum:      prop.Enum,
+		ParamType: "query",
+		Name:      propName,
+		Format:    prop.Format,
+	}
+	p = append(p, pr)
 	return
 }
 
+// makeArrayParam makes a parameter to query elements in an array of primitive
+// values.  The type and format are used from the array's Item property.
+func makeArrayParams(propName string, prop *Property) (p []*Property) {
+	pr := &Property{
+		Name:      propName,
+		Type:      prop.Items.Type,
+		Format:    prop.Items.Format,
+		ParamType: "query",
+	}
+	p = append(p, pr)
+	return
+}
+
+// makeNumParam makes query parameters for numerical values.  If the
+// property does NOT have an enum property, a range query is defined.
 func makeNumParams(propName string, prop *Property) (p []*Property) {
-	pr := Property{
+	pr := &Property{
 		Type:      prop.Type,
 		Minimum:   prop.Minimum,
 		Maximum:   prop.Maximum,
@@ -412,44 +460,35 @@ func makeNumParams(propName string, prop *Property) (p []*Property) {
 		ParamType: "query",
 		Name:      propName,
 	}
-	p = append(p, &pr)
+	p = append(p, pr)
 
 	if len(pr.Enum) == 0 {
 		prRange := pr
 		prRange.AllowMultiple = true
 		prRange.Name = propName + "Range"
-		p = append(p, &prRange)
+		p = append(p, prRange)
 	}
 
 	return
 }
 
-func makeGenParam(propName string, prop *Property) (pr *Property) {
-	pr = &Property{
-		Type:      prop.Type,
-		Enum:      prop.Enum,
-		ParamType: "query",
-		Name:      propName,
-		Format:    prop.Format,
-	}
-	return
-}
-
+// makeStringParams makes query parameters for string values.  If the
+// property is a date or date-time, it adds a range query as well.
 func makeStringParams(propName string, prop *Property) (p []*Property) {
-	pr := Property{
+	pr := &Property{
 		Type:      prop.Type,
 		Enum:      prop.Enum,
 		ParamType: "query",
 		Name:      propName,
 		Format:    prop.Format,
 	}
-	p = append(p, &pr)
+	p = append(p, pr)
 	if (prop.Format == "date" || prop.Format == "date-time") && len(prop.Enum) == 0 {
 		rangeField := pr
 		rangeField.Name = propName + "Range"
 		rangeField.AllowMultiple = true
 
-		p = append(p, &rangeField)
+		p = append(p, rangeField)
 	}
 
 	return
