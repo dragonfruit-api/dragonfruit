@@ -1,11 +1,9 @@
 package backend_couchdb
 
 import (
-	//"fmt"
 	"code.google.com/p/go-uuid/uuid"
 	"encoding/json"
 	"errors"
-	//	"fmt"
 	"github.com/fjl/go-couchdb"
 	"github.com/gedex/inflector"
 	"github.com/ideo/dragonfruit"
