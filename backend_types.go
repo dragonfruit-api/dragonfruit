@@ -5,7 +5,8 @@ import (
 	"net/url"
 )
 
-// QueryParams are a container for
+// QueryParams are a container for http path, query and body information that's
+// used by the back-ends.
 type QueryParams struct {
 	Path        string
 	PathParams  martini.Params

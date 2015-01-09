@@ -15,10 +15,11 @@ var (
 	ReqPathRe  *regexp.Regexp
 	GetDbRe    *regexp.Regexp
 	ViewPathRe *regexp.Regexp
-	// ugh globals
-	m *martini.ClassicMartini
+	m          *martini.ClassicMartini
 )
 
+// init sets up some basic regular expressions used by the frontend and
+// builds the base Martini instance.
 func init() {
 	PathRe = regexp.MustCompile("(/([[:word:]]*)/({([[:word:]]*)}))")
 	ReqPathRe = regexp.MustCompile("(/([[:word:]]*)/([[:word:]]*))")
@@ -27,11 +28,13 @@ func init() {
 	m = martini.Classic()
 }
 
-// blarg...
+// GetMartiniInstance returns a Martini instance (so that it can be used by
+// a larger Martini app)
 func GetMartiniInstance() *martini.ClassicMartini {
 	return m
 }
 
+// ServeDocSet sets up the paths which serve the api documentation
 func ServeDocSet(db Db_backend) {
 	m.Map(db)
 	rd, err := LoadDescriptionFromDb(db, "resourceTemplate.json")
@@ -50,14 +53,18 @@ func ServeDocSet(db Db_backend) {
 
 		return 200, string(docs)
 	})
+	// create a path for each API described in the doc set
 	for _, res := range rd.APIs {
-		NewDocFromSummary(res, db)
+		newDocFromSummary(res, db)
 	}
 
 }
 
-func NewDocFromSummary(r *ResourceSummary, db Db_backend) {
-	resp, err := LoadResourceFromDb(db, strings.TrimLeft(r.Path, "/"), "resourceTemplate.json")
+// newDocFromSummary adds a new api documentation endpoint to the documentation
+// path set up in the function above.
+func newDocFromSummary(r *ResourceSummary, db Db_backend) {
+	resp, err := LoadResourceFromDb(db, strings.TrimLeft(r.Path, "/"),
+		"resourceTemplate.json")
 	if err != nil {
 		panic(err)
 	}
@@ -74,6 +81,7 @@ func NewDocFromSummary(r *ResourceSummary, db Db_backend) {
 	NewApiFromSpec(resp)
 }
 
+// NewApiFromSpec creates a new API from stored swagger-doc specifications.
 func NewApiFromSpec(resource *Resource) {
 
 	for _, api := range resource.Apis {
@@ -84,6 +92,10 @@ func NewApiFromSpec(resource *Resource) {
 
 }
 
+// addOperation adds a single operation from an API specification.  This
+// creates a GET/POST/PUT/PATCH/DELETE listener and maps inbound requests to
+// backend functions.
+// TODO - return specified error codes instead of 500
 func addOperation(api *Api,
 	op *Operation,
 	m *martini.ClassicMartini,
@@ -178,6 +190,8 @@ func addOperation(api *Api,
 	}
 }
 
+// translatePath transforms a path from swagger-doc format (/path/{id}) to
+// Martini format (/path/:id).
 func translatePath(path string, basepath string) (outpath string) {
 	outpath = basepath + PathRe.ReplaceAllString(path, "/$2/:$4")
 	return

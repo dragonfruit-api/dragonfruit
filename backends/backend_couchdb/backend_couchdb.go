@@ -11,11 +11,13 @@ import (
 	"strings"
 )
 
+// A CouchDB view.
 type view struct {
 	MapFunc    string `json:"map"`
 	ReduceFunc string `json:"reduce,omitempty"`
 }
 
+// A CouchDB design document.
 type viewDoc struct {
 	Id       string          `json:"_id"`
 	Rev      string          `json:"_rev,omitempty"`
@@ -23,10 +25,12 @@ type viewDoc struct {
 	Views    map[string]view `json:"views"`
 }
 
+// Db_backend_couch is the exported client that you would use in your app.
 type Db_backend_couch struct {
 	client *couchdb.Client
 }
 
+// viewParams are used to create design documents during the prep phase
 type viewParam struct {
 	path         string
 	singlepath   string
@@ -35,6 +39,7 @@ type viewParam struct {
 	propertyname string
 }
 
+// Represents a row returned by a couchdb result
 type couchdbRow struct {
 	Doc   map[string]interface{} `json:"doc,omitempty"`
 	Id    string                 `json:"id"`
@@ -42,6 +47,7 @@ type couchdbRow struct {
 	Value map[string]interface{} `json:"value"`
 }
 
+// Represents a couchdb result
 type couchDbResponse struct {
 	Rows      []couchdbRow `json:"rows"`
 	Offset    int          `json:"offset"`
@@ -49,22 +55,30 @@ type couchDbResponse struct {
 	Limit     int          `json:"-"`
 }
 
+// modelizePath inflects a model name
 func modelizePath(modelName string) string {
 	return strings.Title(inflector.Singularize(modelName))
 }
 
+// modelizeContainer extracts a model name from a container for that model
 func modelizeContainer(container string) string {
 	return strings.Replace(container, strings.Title(dragonfruit.ContainerName), "", -1)
 }
 
-func (d *Db_backend_couch) Prep(database string, resource *dragonfruit.Resource) error {
+// Prep prepares a database to accept API data.
+// In this case, it creates the design document for the database.
+// There are two types of views in the design document (although these are more
+// or less transperant to the front-end).
+
+func (d *Db_backend_couch) Prep(database string,
+	resource *dragonfruit.Resource) error {
+
 	vd := viewDoc{}
 	id := "_design/core"
 	vd.Id = id
 	vd.Views = make(map[string]view)
 	dbz, err := d.client.EnsureDB(database)
 	if err != nil {
-		// do something here
 		return err
 	}
 
