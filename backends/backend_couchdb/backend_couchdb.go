@@ -66,10 +66,17 @@ func modelizeContainer(container string) string {
 }
 
 // Prep prepares a database to accept API data.
-// In this case, it creates the design document for the database.
+// In this case, it creates a design document for the database that houses
+// a specific model type.
+//
 // There are two types of views in the design document (although these are more
-// or less transperant to the front-end).
-
+// or less transperant to the front-end):
+//
+// - query views handle parameters passed via http GETs
+//
+// - path views handle parameters embedded in a path
+//
+// the Query method defines access rules and priorities
 func (d *Db_backend_couch) Prep(database string,
 	resource *dragonfruit.Resource) error {
 
@@ -100,6 +107,14 @@ func (d *Db_backend_couch) Prep(database string,
 	return nil
 }
 
+// Add adds a view to a view doc.
+func (vd *viewDoc) Add(viewname string, v view) {
+	vd.Views[viewname] = v
+}
+
+// makeQueryParamView creates views for filter queries (i.e. queries passed
+// through GET params)
+// TODO - range queries
 func (vd *viewDoc) makeQueryParamView(api *dragonfruit.Api,
 	op *dragonfruit.Operation,
 	resource *dragonfruit.Resource) {
@@ -115,13 +130,13 @@ func (vd *viewDoc) makeQueryParamView(api *dragonfruit.Api,
 						vw.MapFunc = "function(doc){ emit(doc." + propname + ",doc); }"
 						vd.Add(viewname, vw)
 					}
-
 				}
 			}
 		}
 	}
 }
 
+// makePathParamView creates views for values passed through path parameters
 func (vd *viewDoc) makePathParamView(api *dragonfruit.Api,
 	op *dragonfruit.Operation,
 	resource *dragonfruit.Resource) {
@@ -211,24 +226,30 @@ func (vd *viewDoc) makePathParamView(api *dragonfruit.Api,
 
 }
 
+// makeQueryViewName makes canonical view names for GET queries
 func makeQueryViewName(param string) string {
 	return "by_query_" + param
 }
 
+// makePathViewName makes canonical view names for path parameters
 func makePathViewName(path string) string {
 	matches := dragonfruit.ViewPathRe.FindAllStringSubmatch(path, -1)
 	out := make([]string, 0)
 
 	for _, match := range matches {
 		out = append(out, match[2])
-		//out = append(out, v.paramname)
 	}
 
 	return "by_path_" + strings.Join(out, "_")
-
 }
 
-func findPropertyFromPath(model string, path string, resource *dragonfruit.Resource) (string, *dragonfruit.Property) {
+// findPropertyFromPath introspects a path and returns the property that
+// corresponds to it.  So basically looks at something like /doc/1/stuff/3 and
+// determines that it's looking for "stuff" with a value of "3" inside a
+// document.
+func findPropertyFromPath(model string, path string,
+	resource *dragonfruit.Resource) (string, *dragonfruit.Property) {
+
 	m, ok := resource.Models[model]
 	if ok {
 		for k, v := range m.Properties {
@@ -240,6 +261,7 @@ func findPropertyFromPath(model string, path string, resource *dragonfruit.Resou
 	return "", nil
 }
 
+// Connect connects to a couchdb server.
 func (d *Db_backend_couch) Connect(url string) error {
 	db, err := couchdb.NewClient(url, nil)
 	if err != nil {
@@ -251,13 +273,18 @@ func (d *Db_backend_couch) Connect(url string) error {
 	return nil
 }
 
+// getDatabaseName returns the database that corresponds to the URL path.
 func getDatabaseName(params dragonfruit.QueryParams) (database string) {
 	dbp := dragonfruit.GetDbRe.FindStringSubmatch(params.Path)
 	database = dbp[1]
 	return
 }
 
-func (d *Db_backend_couch) Update(params dragonfruit.QueryParams) (interface{}, error) {
+// Update updates a document
+// TODO - partial document updates
+func (d *Db_backend_couch) Update(params dragonfruit.QueryParams) (interface{},
+	error) {
+
 	database := getDatabaseName(params)
 	_, result, err := d.queryView(params)
 	if err != nil {
@@ -281,7 +308,11 @@ func (d *Db_backend_couch) Update(params dragonfruit.QueryParams) (interface{}, 
 
 }
 
-func (d *Db_backend_couch) Insert(params dragonfruit.QueryParams) (interface{}, error) {
+// Insert adds a new document to the database
+// TODO - Add subdocuments
+func (d *Db_backend_couch) Insert(params dragonfruit.QueryParams) (interface{},
+	error) {
+
 	database := getDatabaseName(params)
 	var document map[string]interface{}
 	err := json.Unmarshal(params.Body, &document)
@@ -294,6 +325,8 @@ func (d *Db_backend_couch) Insert(params dragonfruit.QueryParams) (interface{}, 
 
 }
 
+// Remove deletes a document from the database
+// TODO - remove subdocuments
 func (d *Db_backend_couch) Remove(params dragonfruit.QueryParams) error {
 	_, result, err := d.queryView(params)
 	if err != nil {
@@ -386,6 +419,7 @@ func (d *Db_backend_couch) queryView(params dragonfruit.QueryParams) (int, couch
 	return totalResults, result, err
 }
 
+// setLimitAndOffset parses limit and offset queries from a set of query params
 func setLimitAndOffset(params dragonfruit.QueryParams) (limit int64, offset int64) {
 	limit, offset = 10, 0
 
@@ -411,9 +445,12 @@ func setLimitAndOffset(params dragonfruit.QueryParams) (limit int64, offset int6
 	return
 }
 
-func filterResultSet(result couchDbResponse,
-	params dragonfruit.QueryParams,
+// filsterResultSet applys a set of filters (GET query params basically) to a
+// result set after it is loaded from an initial view (since CouchDB views can't
+// generally filter with more than one parameter)
+func filterResultSet(result couchDbResponse, params dragonfruit.QueryParams,
 	limit int64, offset int64) (int, couchDbResponse, error) {
+
 	if len(params.QueryParams) < 1 {
 		return len(result.Rows), result, nil
 	}
@@ -443,6 +480,8 @@ func filterResultSet(result couchDbResponse,
 	return totalNum, outResult, nil
 }
 
+// Load loads a document from the database.
+// TODO - THIS WILL PROBABLY MOVE TO A NON-EXPORTED METHOD
 func (d *Db_backend_couch) Load(database string, documentId string, doc interface{}) error {
 	db, err := d.client.EnsureDB(database)
 	if err != nil {
@@ -456,10 +495,6 @@ func (d *Db_backend_couch) Load(database string, documentId string, doc interfac
 	}
 
 	return err
-}
-
-func (vd *viewDoc) Add(viewname string, v view) {
-	vd.Views[viewname] = v
 }
 
 // this MUTATES the opts parameter, be careful
