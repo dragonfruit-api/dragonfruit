@@ -66,11 +66,11 @@ func modelizeContainer(container string) string {
 }
 
 // Prep prepares a database to accept API data.
-// In this case, it creates a design document for the database that houses
-// a specific model type.
+// In this case, it creates a database (conventionally namped after the base
+// model that's returned and a design document for querying the docs.
 //
-// There are two types of views in the design document (although these are more
-// or less transperant to the front-end):
+// There are two types of views in the design document (although all of this
+// is mostly invisible to the front-end):
 //
 // - query views handle parameters passed via http GETs
 //
@@ -118,6 +118,7 @@ func (vd *viewDoc) Add(viewname string, v view) {
 func (vd *viewDoc) makeQueryParamView(api *dragonfruit.Api,
 	op *dragonfruit.Operation,
 	resource *dragonfruit.Resource) {
+
 	responseModel := strings.Replace(op.Type, strings.Title(dragonfruit.ContainerName), "", -1)
 	model := resource.Models[responseModel]
 	for _, param := range op.Parameters {
@@ -140,6 +141,7 @@ func (vd *viewDoc) makeQueryParamView(api *dragonfruit.Api,
 func (vd *viewDoc) makePathParamView(api *dragonfruit.Api,
 	op *dragonfruit.Operation,
 	resource *dragonfruit.Resource) {
+
 	matches := dragonfruit.PathRe.FindAllStringSubmatch(api.Path, -1)
 	viewname := makePathViewName(api.Path)
 
@@ -345,11 +347,17 @@ func (d *Db_backend_couch) Remove(params dragonfruit.QueryParams) error {
 
 }
 
-func (d *Db_backend_couch) Delete(database string, id string, rev string) error {
+// Delete removes a document from the database
+// this will be made private
+func (d *Db_backend_couch) Delete(database string, id string,
+	rev string) error {
+
 	_, err := d.client.DB(database).Delete(id, rev)
 	return err
 }
 
+// Save saves a document to the database.
+// This should also be made
 func (d *Db_backend_couch) Save(database string,
 	documentId string,
 	document interface{}) (string, interface{}, error) {
@@ -363,6 +371,7 @@ func (d *Db_backend_couch) Save(database string,
 	return documentId, document, err
 }
 
+// Query queries a view and returns a result
 func (d *Db_backend_couch) Query(params dragonfruit.QueryParams) (interface{}, error) {
 	num, result, err := d.queryView(params)
 	if err != nil {
@@ -385,14 +394,23 @@ func (d *Db_backend_couch) Query(params dragonfruit.QueryParams) (interface{}, e
 	return c, err
 }
 
-func (d *Db_backend_couch) queryView(params dragonfruit.QueryParams) (int, couchDbResponse, error) {
+// queryView queries a couchDB view and returns the number of results,
+// a couchDbResponse object and/or an error object.
+//
+// Views can either be path views (from path parameters) or query views (from
+// GET query parameters).  Since only one view can be applied during any query,
+// if more than one parameter is sent during a request, the result set is
+// filtered using the filterResultSet function below.
+//
+// The pickView method selects the appropriate view, based on the inbound
+// parameters.
+func (d *Db_backend_couch) queryView(params dragonfruit.QueryParams) (int,
+	couchDbResponse, error) {
+
 	var (
 		result couchDbResponse
 		err    error
 	)
-	opts := make(map[string]interface{})
-
-	database := getDatabaseName(params)
 
 	limit, offset := setLimitAndOffset(params)
 
@@ -400,18 +418,28 @@ func (d *Db_backend_couch) queryView(params dragonfruit.QueryParams) (int, couch
 		return 0, couchDbResponse{}, errors.New("Limit must be greater than 0")
 	}
 
+	database := getDatabaseName(params)
 	db := d.client.DB(database)
-	viewName, ok := d.pickView(params, opts, limit, offset)
 
-	if ok {
+	// map to hold view query options
+	opts := make(map[string]interface{})
+
+	viewName, viewExists := d.pickView(params, opts, limit, offset)
+
+	// if we found a view, query it
+	if viewExists {
 		err = db.View("_design/core", viewName, &result, opts)
 	} else {
+		// if there is no view, use AllDocs
+		// this theoretically shouldn't happen
 		opts["include_docs"] = true
 		err = db.AllDocs(&result, opts)
 	}
 
 	totalResults := result.TotalRows
 
+	// if there are any query params that were not applied using a view,
+	// run additional filters on the result set
 	if len(params.QueryParams) > 0 {
 		totalResults, result, err = filterResultSet(result, params, limit, offset)
 	}
@@ -420,7 +448,9 @@ func (d *Db_backend_couch) queryView(params dragonfruit.QueryParams) (int, couch
 }
 
 // setLimitAndOffset parses limit and offset queries from a set of query params
-func setLimitAndOffset(params dragonfruit.QueryParams) (limit int64, offset int64) {
+func setLimitAndOffset(params dragonfruit.QueryParams) (limit int64,
+	offset int64) {
+
 	limit, offset = 10, 0
 
 	l := params.QueryParams.Get("limit")
@@ -446,8 +476,10 @@ func setLimitAndOffset(params dragonfruit.QueryParams) (limit int64, offset int6
 }
 
 // filsterResultSet applys a set of filters (GET query params basically) to a
-// result set after it is loaded from an initial view (since CouchDB views can't
-// generally filter with more than one parameter)
+// result set after it is loaded from an initial view (since the CouchDB views
+// created by Prep aren't set up to filter with more than one parameter)
+//
+// After a result set is returned from a view,
 func filterResultSet(result couchDbResponse, params dragonfruit.QueryParams,
 	limit int64, offset int64) (int, couchDbResponse, error) {
 
@@ -497,37 +529,52 @@ func (d *Db_backend_couch) Load(database string, documentId string, doc interfac
 	return err
 }
 
-// this MUTATES the opts parameter, be careful
+// pickView looks at the possible CouchDB views that could be queried and
+// determines which view actually gets used to generate an initial result set.
+//
+// The opts parameter gets mutated - be careful.
+//
+// It returns a string view name and a boolean value to indicate whether
+// a view was found at not.
 func (d *Db_backend_couch) pickView(params dragonfruit.QueryParams,
 	opts map[string]interface{},
 	limit int64,
 	offset int64) (string, bool) {
-	// use all docs or a view query
 
 	viewName := makePathViewName(params.Path)
-	viewMatches := dragonfruit.ViewPathRe.FindAllStringSubmatch(params.Path, -1)
-	if len(params.PathParams) == 0 {
-		if len(params.QueryParams) > 0 {
-			queryView, ok := d.findQueryView(params, opts)
-			if ok {
-				if len(params.QueryParams) == 0 {
-					opts["limit"] = limit
-					opts["skip"] = offset
-				}
-				return queryView, true
-			}
-		}
-		opts["limit"] = limit
-		opts["skip"] = offset
 
-		return viewName, true
-	}
-
+	// if there's no query parameters to filter, you can go
+	// ahead and use the passed limit and offset
+	// and apply it during the query to the view
+	// otherwise it has to be applied during the filter step
 	if len(params.QueryParams) == 0 {
 		opts["limit"] = limit
 		opts["skip"] = offset
 	}
 
+	// if there aren't any path params (e.g. /paramname/{value}), use a query
+	// view.
+	if len(params.PathParams) == 0 {
+		if len(params.QueryParams) > 0 {
+			queryView, found := d.findQueryView(params, opts)
+			if found {
+
+				// since params.QueryParams has now been mutated,
+				// re-check to see if you need to add the
+				// limit and offset
+				if len(params.QueryParams) == 0 {
+					opts["limit"] = limit
+					opts["skip"] = offset
+				}
+
+				return queryView, true
+			}
+		}
+
+		return viewName, true
+	}
+
+	viewMatches := dragonfruit.ViewPathRe.FindAllStringSubmatch(params.Path, -1)
 	// use a non-array key
 	if (len(params.PathParams) == 1) && (len(viewMatches) == 1) {
 		// ugh i know...
@@ -563,8 +610,17 @@ func (d *Db_backend_couch) pickView(params dragonfruit.QueryParams,
 
 }
 
-// this also mutates opts
-func (d *Db_backend_couch) findQueryView(params dragonfruit.QueryParams, opts map[string]interface{}) (string, bool) {
+// findQueryView selects a view from the design document to query with the
+// passed QueryParams map.  This mutates both the opts and params maps.
+//
+// If it finds a param to query, it removes that query from the QueryParams map
+// and adds options to the opts map.
+//
+// It returns a boolean to indicate the view was found and the name of the
+// view to use.
+func (d *Db_backend_couch) findQueryView(params dragonfruit.QueryParams,
+	opts map[string]interface{}) (string, bool) {
+
 	var vd viewDoc
 	//d.L
 	database := getDatabaseName(params)
@@ -572,6 +628,8 @@ func (d *Db_backend_couch) findQueryView(params dragonfruit.QueryParams, opts ma
 	if err != nil {
 		panic(err)
 	}
+
+	// iterate over the passed queryParams map
 	for queryParam, queryValue := range params.QueryParams {
 		isRange := strings.Contains(queryParam, "Range")
 		if isRange {
@@ -592,7 +650,7 @@ func (d *Db_backend_couch) findQueryView(params dragonfruit.QueryParams, opts ma
 	return "", false
 }
 
-// just don't ask....
+// makeTypeName returns a content type from path parameters.
 func makeTypeName(path string) string {
 	matches := dragonfruit.ViewPathRe.FindAllStringSubmatch(path, -1)
 	return inflector.Singularize(matches[(len(matches) - 1)][2])

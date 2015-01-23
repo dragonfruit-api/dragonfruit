@@ -1,7 +1,6 @@
 package dragonfruit
 
 import (
-	"github.com/go-martini/martini"
 	"net/url"
 )
 
@@ -9,7 +8,7 @@ import (
 // used by the back-ends.
 type QueryParams struct {
 	Path        string
-	PathParams  martini.Params
+	PathParams  map[string]string
 	QueryParams url.Values
 	Body        []byte
 }
