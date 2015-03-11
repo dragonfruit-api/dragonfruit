@@ -1,14 +1,17 @@
 package backend_couchdb
 
 import (
+	"bytes"
 	"code.google.com/p/go-uuid/uuid"
 	"encoding/json"
 	"errors"
 	"github.com/fjl/go-couchdb"
 	"github.com/gedex/inflector"
 	"github.com/ideo/dragonfruit"
+	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // A CouchDB view.
@@ -27,7 +30,8 @@ type viewDoc struct {
 
 // Db_backend_couch is the exported client that you would use in your app.
 type Db_backend_couch struct {
-	client *couchdb.Client
+	client     *couchdb.Client
+	connection chan bool
 }
 
 // viewParams are used to create design documents during the prep phase
@@ -271,6 +275,7 @@ func (d *Db_backend_couch) Connect(url string) error {
 	}
 
 	d.client = db
+	d.connection = make(chan bool, 1)
 
 	return nil
 }
@@ -512,9 +517,54 @@ func filterResultSet(result couchDbResponse, params dragonfruit.QueryParams,
 	return totalNum, outResult, nil
 }
 
+func (d *Db_backend_couch) ensureConnection() (err error) {
+	defer func() {
+		<-d.connection
+	}()
+
+	// only do this stuff if no one
+	d.connection <- true
+	err = d.client.Ping()
+	if err == nil {
+		return
+	}
+
+	_, err = exec.Command("couchdb", "-b").Output()
+	if err != nil {
+		return err
+	}
+
+	var s func() error
+	s = func() error {
+		var err error
+		s_out, err := exec.Command("couchdb", "-s").CombinedOutput()
+
+		if bytes.Contains(s_out, []byte("Apache CouchDB is running as process")) {
+			time.Sleep(1000 * time.Millisecond)
+			return err
+		}
+		if bytes.Contains(s_out, []byte("Apache CouchDB is not running.")) {
+			time.Sleep(1000 * time.Millisecond)
+			return s()
+		}
+
+		if err != nil {
+			return err
+		}
+
+		return errors.New(string(s_out))
+
+	}
+
+	err = s()
+
+	return
+}
+
 // Load loads a document from the database.
 // TODO - THIS WILL PROBABLY MOVE TO A NON-EXPORTED METHOD
 func (d *Db_backend_couch) Load(database string, documentId string, doc interface{}) error {
+	d.ensureConnection()
 	db, err := d.client.EnsureDB(database)
 	if err != nil {
 		return err

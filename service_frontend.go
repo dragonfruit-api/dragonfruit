@@ -30,14 +30,15 @@ func init() {
 
 // GetMartiniInstance returns a Martini instance (so that it can be used by
 // a larger Martini app)
-func GetMartiniInstance() *martini.ClassicMartini {
+func GetMartiniInstance(cnf Conf) *martini.ClassicMartini {
+	//
 	return m
 }
 
 // ServeDocSet sets up the paths which serve the api documentation
-func ServeDocSet(db Db_backend) {
+func ServeDocSet(db Db_backend, cnf Conf) {
 	m.Map(db)
-	rd, err := LoadDescriptionFromDb(db, "resourceTemplate.json")
+	rd, err := LoadDescriptionFromDb(db, cnf)
 	if err != nil {
 		panic(err)
 	}
@@ -55,19 +56,21 @@ func ServeDocSet(db Db_backend) {
 	})
 	// create a path for each API described in the doc set
 	for _, res := range rd.APIs {
-		newDocFromSummary(res, db)
+		newDocFromSummary(res, db, cnf)
 	}
 
 }
 
 // newDocFromSummary adds a new api documentation endpoint to the documentation
 // path set up in the function above.
-func newDocFromSummary(r *ResourceSummary, db Db_backend) {
-	resp, err := LoadResourceFromDb(db, strings.TrimLeft(r.Path, "/"),
-		"resourceTemplate.json")
+func newDocFromSummary(r *ResourceSummary, db Db_backend, cnf Conf) {
+	// load either a populated resource or an empty one.
+	resp, err := LoadResourceFromDb(db, strings.TrimLeft(r.Path, "/"), cnf)
+
 	if err != nil {
 		panic(err)
 	}
+
 	m.Get("/api-docs"+r.Path, func(res http.ResponseWriter) (int, string) {
 		h := res.Header()
 

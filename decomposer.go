@@ -3,7 +3,6 @@ package dragonfruit
 import (
 	"encoding/json"
 	"github.com/gedex/inflector"
-	"io/ioutil"
 	"math"
 	"reflect"
 	"regexp"
@@ -15,20 +14,17 @@ import (
 // Decompose is the only exported function in this file.  It takes a set of
 // sample data, introspects it and converts it into a map of Swagger models.
 // It returns the model map and/or any errors.
-func Decompose(sampledata []byte, baseType string) (m map[string]*Model, err error) {
+func Decompose(sampledata []byte, baseType string, cnf Conf) (m map[string]*Model, err error) {
 
 	var receiver interface{}
 
 	baseType = strings.Title(baseType)
 
-	byt, err := ioutil.ReadFile("containermodels.json")
-	basecontaners := make([]*Model, 2)
-
-	err = json.Unmarshal(byt, &basecontaners)
+	basecontainers := cnf.ContainerModels
 
 	m = make(map[string]*Model)
-	m[strings.Title(ContainerName)] = basecontaners[0]
-	m["Metalist"] = basecontaners[1]
+	m[strings.Title(ContainerName)] = basecontainers[0]
+	m["Metalist"] = basecontainers[1]
 
 	appendSubtype(baseType, m)
 
