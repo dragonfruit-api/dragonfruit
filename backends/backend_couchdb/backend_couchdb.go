@@ -5,6 +5,7 @@ import (
 	"code.google.com/p/go-uuid/uuid"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/fjl/go-couchdb"
 	"github.com/gedex/inflector"
 	"github.com/ideo/dragonfruit"
@@ -537,8 +538,11 @@ func (d *Db_backend_couch) ensureConnection() (err error) {
 	var s func() error
 	s = func() error {
 		var err error
+		fmt.Println("Waiting for couchdb to start...")
 		s_out, err := exec.Command("couchdb", "-s").CombinedOutput()
-
+		if err != nil {
+			fmt.Println("Launch error: ", err, "please send this to Peter O.")
+		}
 		if bytes.Contains(s_out, []byte("Apache CouchDB is running as process")) {
 			time.Sleep(1000 * time.Millisecond)
 			return err
@@ -552,6 +556,7 @@ func (d *Db_backend_couch) ensureConnection() (err error) {
 			return err
 		}
 
+		fmt.Println("So this happened: ", string(s_out), "... Please send this to Peter O.")
 		return errors.New(string(s_out))
 
 	}
