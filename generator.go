@@ -29,6 +29,7 @@ func LoadDescriptionFromDb(db Db_backend,
 	if err != nil {
 		//TODO - fix this stupid shadowing issue
 		rd = cnf.ResourceDescriptionTemplate
+		return rd, nil
 	}
 	return rd, err
 }
@@ -44,6 +45,7 @@ func LoadResourceFromDb(db Db_backend,
 	// doc wasn't found
 	if err != nil {
 		res = cnf.ResourceTemplate
+		return res, nil
 	}
 
 	return res, err
