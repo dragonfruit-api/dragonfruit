@@ -66,7 +66,7 @@ func appendSubtype(baseSubtype string, m map[string]*Model) string {
 	m[subtype].Properties["results"] = &Property{
 		Type: "array",
 		Items: &ItemsRef{
-			Ref: baseSubtype,
+			Ref: strings.Title(baseSubtype),
 		},
 	}
 	return subtype
@@ -128,23 +128,24 @@ func buildProperty(propName string,
 
 	case "array":
 		iref := new(ItemsRef)
-
 		prop := &Property{}
 		prop.buildSliceProperty(inflector.Singularize(propName), iref, sanitized, models)
 
 		// always pluralize array stuff
 		pname := inflector.Pluralize(inflector.Singularize(propName))
-
 		models[modelName].Properties[pname] = prop
 		break
+
 	case "string":
 		prop := processString(sanitized)
 		models[modelName].Properties[propName] = prop
 		break
+
 	case "number":
 		prop := processNumber(sanitized)
 		models[modelName].Properties[propName] = prop
 		break
+
 	default:
 		prop := &Property{
 			Type: datatype,

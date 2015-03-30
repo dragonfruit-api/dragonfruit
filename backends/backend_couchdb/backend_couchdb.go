@@ -293,9 +293,29 @@ func getDatabaseName(params dragonfruit.QueryParams) (database string) {
 func (d *Db_backend_couch) Update(params dragonfruit.QueryParams) (interface{},
 	error) {
 
-	database := getDatabaseName(params)
-	_, result, err := d.queryView(params)
-	if err != nil {
+	fmt.Println(params.Path)
+	fmt.Println(params.PathParams)
+	fmt.Printf("%+v\n", params.PathParams)
+
+	doc, err := d.getRootDocument(params)
+	fmt.Println(doc.Id, doc.Key, doc.Value, doc.Doc, err)
+	fmt.Println(params.Body)
+	fmt.Println(dragonfruit.PathRe.FindAllStringSubmatch(params.Path, -1))
+
+	pathmap := dragonfruit.PathRe.FindAllStringSubmatch(params.Path, -1)
+
+	//pathmap = pathmap[1:len(pathmap)]
+
+	var v interface{}
+	json.Unmarshal(params.Body, &v)
+
+	fmt.Println(v)
+
+	findSubDoc(pathmap, params.PathParams, doc.Value, v)
+	//database := getDatabaseName(params)
+	//_, result, err := d.queryView(params)
+
+	/*if err != nil {
 		return nil, err
 	}
 
@@ -310,9 +330,64 @@ func (d *Db_backend_couch) Update(params dragonfruit.QueryParams) (interface{},
 	}
 	documentId := result.Rows[0].Id
 
-	_, out, err := d.Save(database, documentId, document)
+	_, out, err := d.Save(database, documentId, document)*/
 
-	return out, err
+	return "", nil
+
+}
+
+func findSubDoc(pathslice [][]string, pathParams map[string]string,
+	document map[string]interface{},
+	bodyParams interface{}) (map[string]interface{}, error) {
+
+	//fmt.Println(pathslice, pathParams)
+	//fmt.Println("pathslice:", len(pathslice), len(pathslice[1:]))
+	if len(pathslice) == 0 {
+		switch bodyParams := bodyParams.(type) {
+		default:
+			fmt.Printf("unexpected type %T", bodyParams)
+			break
+		case map[string]interface{}:
+			fmt.Printf("map string %t\n", bodyParams)
+		}
+
+	} else {
+		findSubDoc(pathslice[1:], pathParams, document, bodyParams)
+
+	}
+
+	v := make(map[string]interface{})
+	return v, nil
+}
+
+func (d *Db_backend_couch) getRootDocument(params dragonfruit.QueryParams) (couchdbRow, error) {
+	//fmt.Println(dragonfruit.ViewPathRe.FindAllStringSubmatch(params.Path, -1))
+	fmt.Println(dragonfruit.PathRe.FindAllStringSubmatch(params.Path, -1))
+	//fmt.Println(dragonfruit.ReqPathRe.FindAllStringSubmatch(params.Path, -1))
+	//fmt.Println(dragonfruit.GetDbRe.FindAllStringSubmatch(params.Path, -1))
+
+	viewpath := dragonfruit.PathRe.FindAllStringSubmatch(params.Path, -1)
+
+	// take the first segment from the update path
+	newPath := viewpath[0][0]
+
+	newPathParams := make(map[string]string)
+	newPathParams[viewpath[0][4]] = params.PathParams[viewpath[0][4]]
+
+	fmt.Println(newPath)
+	newparams := dragonfruit.QueryParams{
+		Path:       newPath,
+		PathParams: newPathParams,
+	}
+
+	_, result, err := d.queryView(newparams)
+	if err != nil {
+		return couchdbRow{}, err
+	}
+
+	row := result.Rows[0]
+
+	return row, err
 
 }
 
