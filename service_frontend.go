@@ -2,11 +2,12 @@ package dragonfruit
 
 import (
 	"encoding/json"
-	//	"fmt"
+	//"fmt"
 	"github.com/go-martini/martini"
 	"io/ioutil"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -30,14 +31,15 @@ func init() {
 
 // GetMartiniInstance returns a Martini instance (so that it can be used by
 // a larger Martini app)
-func GetMartiniInstance() *martini.ClassicMartini {
+func GetMartiniInstance(cnf Conf) *martini.ClassicMartini {
+	//
 	return m
 }
 
 // ServeDocSet sets up the paths which serve the api documentation
-func ServeDocSet(db Db_backend) {
+func ServeDocSet(db Db_backend, cnf Conf) {
 	m.Map(db)
-	rd, err := LoadDescriptionFromDb(db, "resourceTemplate.json")
+	rd, err := LoadDescriptionFromDb(db, cnf)
 	if err != nil {
 		panic(err)
 	}
@@ -55,19 +57,21 @@ func ServeDocSet(db Db_backend) {
 	})
 	// create a path for each API described in the doc set
 	for _, res := range rd.APIs {
-		newDocFromSummary(res, db)
+		newDocFromSummary(res, db, cnf)
 	}
 
 }
 
 // newDocFromSummary adds a new api documentation endpoint to the documentation
 // path set up in the function above.
-func newDocFromSummary(r *ResourceSummary, db Db_backend) {
-	resp, err := LoadResourceFromDb(db, strings.TrimLeft(r.Path, "/"),
-		"resourceTemplate.json")
+func newDocFromSummary(r *ResourceSummary, db Db_backend, cnf Conf) {
+	// load either a populated resource or an empty one.
+	resp, err := LoadResourceFromDb(db, strings.TrimLeft(r.Path, "/"), cnf)
+
 	if err != nil {
 		panic(err)
 	}
+
 	m.Get("/api-docs"+r.Path, func(res http.ResponseWriter) (int, string) {
 		h := res.Header()
 
@@ -101,6 +105,7 @@ func addOperation(api *Api,
 	m *martini.ClassicMartini,
 	basePath string,
 	models map[string]*Model) {
+
 	path := translatePath(api.Path, basePath)
 
 	switch op.Method {
@@ -111,9 +116,16 @@ func addOperation(api *Api,
 			h.Add("Content-Type", "application/json;charset=utf-8")
 			req.ParseForm()
 
+			// coerce any required path parameters
+			outParams, err := coercePathParam(params, op.Parameters)
+			if err != nil {
+				outerr, _ := json.Marshal(err.Error())
+				return 409, string(outerr)
+			}
+
 			q := QueryParams{
 				Path:        api.Path,
-				PathParams:  params,
+				PathParams:  outParams,
 				QueryParams: req.Form,
 			}
 
@@ -136,9 +148,17 @@ func addOperation(api *Api,
 
 			h.Add("Content-Type", "application/json;charset=utf-8")
 			val, err := ioutil.ReadAll(req.Body)
+
+			// coerce any required path parameters
+			outParams, err := coercePathParam(params, op.Parameters)
+			if err != nil {
+				outerr, _ := json.Marshal(err.Error())
+				return 409, string(outerr)
+			}
+
 			q := QueryParams{
 				Path:       api.Path,
-				PathParams: params,
+				PathParams: outParams,
 				Body:       val,
 			}
 			doc, err := db.Insert(q)
@@ -156,9 +176,14 @@ func addOperation(api *Api,
 
 			h.Add("Content-Type", "application/json;charset=utf-8")
 			val, err := ioutil.ReadAll(req.Body)
+			outParams, err := coercePathParam(params, op.Parameters)
+			if err != nil {
+				outerr, _ := json.Marshal(err.Error())
+				return 409, string(outerr)
+			}
 			q := QueryParams{
 				Path:       api.Path,
-				PathParams: params,
+				PathParams: outParams,
 				Body:       val,
 			}
 			doc, err := db.Update(q)
@@ -175,11 +200,16 @@ func addOperation(api *Api,
 			h := res.Header()
 
 			h.Add("Content-Type", "application/json;charset=utf-8")
+			outParams, err := coercePathParam(params, op.Parameters)
+			if err != nil {
+				outerr, _ := json.Marshal(err.Error())
+				return 409, string(outerr)
+			}
 			q := QueryParams{
 				Path:       api.Path,
-				PathParams: params,
+				PathParams: outParams,
 			}
-			err := db.Remove(q)
+			err = db.Remove(q)
 			if err != nil {
 				outerr, _ := json.Marshal(err.Error())
 				return 500, string(outerr)
@@ -188,6 +218,38 @@ func addOperation(api *Api,
 		})
 		break
 	}
+}
+
+// ugh pretending that dynamic typing is a thing
+func coercePathParam(sentParams martini.Params, apiPathParams []*Property) (outParams map[string]interface{}, err error) {
+	outParams = make(map[string]interface{})
+	// and here is where we wish Golang had functional-style
+	// list manipulation stuff
+	for key, sentParam := range sentParams {
+		for _, apiParam := range apiPathParams {
+			if key == apiParam.Name {
+				switch apiParam.Type {
+				case "integer":
+					val, parseErr := strconv.ParseInt(sentParam, 10, 0)
+					if parseErr != nil {
+						err = parseErr
+						return
+					}
+					outParams[key] = val
+					break
+
+				default:
+					outParams[key] = sentParam
+					break
+				}
+				// done with this particular key
+				break
+			}
+		}
+	}
+
+	return
+
 }
 
 // translatePath transforms a path from swagger-doc format (/path/{id}) to

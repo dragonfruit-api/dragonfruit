@@ -1,58 +1,35 @@
 package dragonfruit
 
 import (
-	"encoding/json"
 	"github.com/gedex/inflector"
-	"io/ioutil"
 	"strings"
-)
-
-var (
-	commonResponseCodes []*ResponseMessage
-	commonGetParams     []*Property
 )
 
 // getCommonResponseCodes loads a set of response codes that most of the APIs
 // return.
-func getCommonResponseCodes() []*ResponseMessage {
-	if len(commonResponseCodes) < 1 {
-		commonResponseCodes = make([]*ResponseMessage, 0)
-		byt, _ := ioutil.ReadFile("responseMessages.json")
-		err := json.Unmarshal(byt, &commonResponseCodes)
-		if err != nil {
-			panic(err)
-		}
-	}
-	return commonResponseCodes
+func getCommonResponseCodes(cnf Conf) []*ResponseMessage {
+
+	return cnf.CommonResponseCodes
 }
 
 // getCommonGetParams loads a set of common params that should be added to
 // all collection get operations (like limit and offset).
-func getCommonGetParams() []*Property {
-	if len(commonGetParams) < 1 {
-		commonGetParams = make([]*Property, 0)
-		byt, _ := ioutil.ReadFile("commonGetParams.json")
-		err := json.Unmarshal(byt, &commonGetParams)
-		if err != nil {
-			panic(err)
-		}
-	}
-	return commonGetParams
+func getCommonGetParams(cnf Conf) []*Property {
+	return cnf.CommonGetParams
 }
 
 // LoadDescriptionFromDb loads a resource description from a database backend.
 // (see the backend stuff and types).
 func LoadDescriptionFromDb(db Db_backend,
-	fallbackTemplate string) (*ResourceDescription, error) {
+	cnf Conf) (*ResourceDescription, error) {
 
 	rd := new(ResourceDescription)
 	err := db.Load(SwaggerResourceDB, ResourceDescriptionName, rd)
 
 	if err != nil {
 		//TODO - fix this stupid shadowing issue
-		byt, _ := ioutil.ReadFile(fallbackTemplate)
-
-		json.Unmarshal(byt, rd)
+		rd = cnf.ResourceDescriptionTemplate
+		return rd, nil
 	}
 	return rd, err
 }
@@ -60,25 +37,17 @@ func LoadDescriptionFromDb(db Db_backend,
 // LoadResourceFromDb loads a resource from a database backend
 // (see the backend stuff and types).
 func LoadResourceFromDb(db Db_backend,
-	resourcePath string, fallbackTemplate string) (*Resource, error) {
+	resourcePath string, cnf Conf) (*Resource, error) {
 
 	res := new(Resource)
 	err := db.Load(SwaggerResourceDB, ResourceStem+resourcePath, &res)
 
 	// doc wasn't found
 	if err != nil {
-		res, err = NewFromTemplate(fallbackTemplate)
+		res = cnf.ResourceTemplate
+		return res, nil
 	}
 
-	return res, err
-}
-
-// NewFromTemplate creates a new API resource from a template file.
-func NewFromTemplate(filePath string) (*Resource, error) {
-	res := new(Resource)
-	byt, err := ioutil.ReadFile(filePath)
-
-	json.Unmarshal(byt, res)
 	return res, err
 }
 
@@ -93,6 +62,7 @@ func MakeCommonAPIs(
 	modelName string,
 	modelMap map[string]*Model,
 	upstreamParams []*Property,
+	cnf Conf,
 ) []*Api {
 
 	model := modelMap[modelName]
@@ -106,10 +76,10 @@ func MakeCommonAPIs(
 	}
 
 	// make the colleciton operations and parse the sub parts
-	getOp := makeCollectionOperation(modelName, model, upstreamParams)
+	getOp := makeCollectionOperation(modelName, model, upstreamParams, cnf)
 	collApi.Operations = append(collApi.Operations, getOp)
 
-	postOp := makePostOperation(modelName, model, upstreamParams)
+	postOp := makePostOperation(modelName, model, upstreamParams, cnf)
 	collApi.Operations = append(collApi.Operations, postOp)
 
 	// make a single API - use this for sub collections too
@@ -125,21 +95,21 @@ func MakeCommonAPIs(
 
 	out = append(out, collApi)
 
-	getSingleOp := makeSingleGetOperation(modelName, model, upstreamParams)
+	getSingleOp := makeSingleGetOperation(modelName, model, upstreamParams, cnf)
 	singleApi.Operations = append(singleApi.Operations, getSingleOp)
 
-	putOp := makePutOperation(modelName, model, upstreamParams)
+	putOp := makePutOperation(modelName, model, upstreamParams, cnf)
 	singleApi.Operations = append(singleApi.Operations, putOp)
 
-	patchOp := makePatchOperation(modelName, model, upstreamParams)
+	patchOp := makePatchOperation(modelName, model, upstreamParams, cnf)
 	singleApi.Operations = append(singleApi.Operations, patchOp)
 
-	deleteOp := makeDeleteOperation(modelName, model, upstreamParams)
+	deleteOp := makeDeleteOperation(modelName, model, upstreamParams, cnf)
 	singleApi.Operations = append(singleApi.Operations, deleteOp)
 
 	out = append(out, singleApi)
 
-	subApis := makeSubApis(singleApi.Path, model, modelMap, upstreamParams)
+	subApis := makeSubApis(singleApi.Path, model, modelMap, upstreamParams, cnf)
 	out = append(out, subApis...)
 
 	return out
@@ -151,6 +121,7 @@ func makeSubApis(
 	model *Model,
 	modelMap map[string]*Model,
 	upstreamParams []*Property,
+	cnf Conf,
 ) []*Api {
 
 	out := make([]*Api, 0)
@@ -161,7 +132,7 @@ func makeSubApis(
 			st := inflector.Pluralize(inflector.Singularize(subModelName))
 			resourceroot := strings.ToLower(st)
 			commonApis := MakeCommonAPIs(prefix, resourceroot, subModelName,
-				modelMap, upstreamParams)
+				modelMap, upstreamParams, cnf)
 
 			out = append(out, commonApis...)
 		}
@@ -215,7 +186,7 @@ func makePathId(model *Model) (propName string, idparam *Property) {
 
 // makeDeleteOperation creates operations to delete single instances of a model.
 func makeDeleteOperation(modelName string,
-	model *Model, upstreamParams []*Property) (deleteOp *Operation) {
+	model *Model, upstreamParams []*Property, cnf Conf) (deleteOp *Operation) {
 
 	deleteOp = &Operation{
 		Method:   "DELETE",
@@ -228,7 +199,7 @@ func makeDeleteOperation(modelName string,
 		Code:    200,
 		Message: "Successfully deleted",
 	}
-	deleteOp.ResponseMessages = append(getCommonResponseCodes(), deleteResp)
+	deleteOp.ResponseMessages = append(getCommonResponseCodes(cnf), deleteResp)
 
 	deleteOp.Parameters = append(deleteOp.Parameters, upstreamParams...)
 	return
@@ -238,7 +209,7 @@ func makeDeleteOperation(modelName string,
 // makeSingleGetOperation makes operations to load single instances of models.
 // Basically for URLs ending /{model id}.
 func makeSingleGetOperation(modelName string, model *Model,
-	upstreamParams []*Property) (patchOp *Operation) {
+	upstreamParams []*Property, cnf Conf) (patchOp *Operation) {
 
 	patchOp = &Operation{
 		Method:   "GET",
@@ -253,7 +224,7 @@ func makeSingleGetOperation(modelName string, model *Model,
 		Message:       "Ok",
 		ResponseModel: modelName + strings.Title(ContainerName),
 	}
-	patchOp.ResponseMessages = append(getCommonResponseCodes(), putResp)
+	patchOp.ResponseMessages = append(getCommonResponseCodes(cnf), putResp)
 
 	patchOp.Parameters = append(patchOp.Parameters, upstreamParams...)
 	return
@@ -261,7 +232,7 @@ func makeSingleGetOperation(modelName string, model *Model,
 
 // makePatchOperation creates operations to partially update models.
 func makePatchOperation(modelName string, model *Model,
-	upstreamParams []*Property) (patchOp *Operation) {
+	upstreamParams []*Property, cnf Conf) (patchOp *Operation) {
 	// Create the put operation
 
 	patchOp = &Operation{
@@ -277,7 +248,7 @@ func makePatchOperation(modelName string, model *Model,
 		Message:       "Successfully updated",
 		ResponseModel: modelName,
 	}
-	patchOp.ResponseMessages = append(getCommonResponseCodes(), putResp)
+	patchOp.ResponseMessages = append(getCommonResponseCodes(cnf), putResp)
 
 	// The patch body
 	bodyParam := &Property{
@@ -295,7 +266,7 @@ func makePatchOperation(modelName string, model *Model,
 
 // makePutOperation creates operations to update models.
 func makePutOperation(modelName string,
-	model *Model, upstreamParams []*Property) (putOp *Operation) {
+	model *Model, upstreamParams []*Property, cnf Conf) (putOp *Operation) {
 
 	// Create the put operation
 	putOp = &Operation{
@@ -311,7 +282,7 @@ func makePutOperation(modelName string,
 		Message:       "Successfully updated",
 		ResponseModel: modelName,
 	}
-	putOp.ResponseMessages = append(getCommonResponseCodes(), putResp)
+	putOp.ResponseMessages = append(getCommonResponseCodes(cnf), putResp)
 
 	// The put body
 	bodyParam := &Property{
@@ -329,7 +300,7 @@ func makePutOperation(modelName string,
 
 // makePostOperation makes a POST operation to create new instances of models.
 func makePostOperation(modelName string,
-	model *Model, upstreamParams []*Property) (postOp *Operation) {
+	model *Model, upstreamParams []*Property, cnf Conf) (postOp *Operation) {
 
 	postOp = &Operation{
 		Method:   "POST",
@@ -344,7 +315,7 @@ func makePostOperation(modelName string,
 		Message:       "Successfully created",
 		ResponseModel: modelName,
 	}
-	postOp.ResponseMessages = append(getCommonResponseCodes(), postResp)
+	postOp.ResponseMessages = append(getCommonResponseCodes(cnf), postResp)
 
 	// Post body to create the new model.
 	bodyParam := &Property{
@@ -362,7 +333,7 @@ func makePostOperation(modelName string,
 
 // makeCollectionOperations defines GET calls for collections of the model.
 // Basically, GET operations on URLs ending with /
-func makeCollectionOperation(modelName string, model *Model, upstreamParams []*Property) (getOp *Operation) {
+func makeCollectionOperation(modelName string, model *Model, upstreamParams []*Property, cnf Conf) (getOp *Operation) {
 	getOp = &Operation{
 		Method:   "GET",
 		Type:     modelName + strings.Title(ContainerName),
@@ -376,10 +347,10 @@ func makeCollectionOperation(modelName string, model *Model, upstreamParams []*P
 		Message:       "Successful Lookup",
 		ResponseModel: modelName + strings.Title(ContainerName),
 	}
-	getOp.ResponseMessages = append(getCommonResponseCodes(), getResp)
+	getOp.ResponseMessages = append(getCommonResponseCodes(cnf), getResp)
 
 	// add the parameters
-	getOp.Parameters = getCommonGetParams()
+	getOp.Parameters = getCommonGetParams(cnf)
 	for propName, prop := range model.Properties {
 		switch prop.Type {
 		// if there is no type, the item is a ref

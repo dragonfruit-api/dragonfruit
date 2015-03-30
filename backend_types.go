@@ -8,7 +8,7 @@ import (
 // used by the back-ends.
 type QueryParams struct {
 	Path        string
-	PathParams  map[string]string
+	PathParams  map[string]interface{}
 	QueryParams url.Values
 	Body        []byte
 }

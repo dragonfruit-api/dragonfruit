@@ -1,4 +1,4 @@
 dragonfruit
 ===========
 
-migrating the API builder into a more idiomatic structure (with a cooler name)
+Tool for creating REST APIs from arbitrary sample data.

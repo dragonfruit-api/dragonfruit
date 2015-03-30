@@ -12,6 +12,20 @@ const (
 	ResourceStem            = "resource_"
 )
 
+// A configuration set for the service
+type Conf struct {
+	ContainerModels             []*Model             `json:"containerModels"`
+	CommonResponseCodes         []*ResponseMessage   `json:"commonResponseCodes"`
+	CommonGetParams             []*Property          `json:"commonGetParams"`
+	ResourceDescriptionTemplate *ResourceDescription `json:"resourceDescriptionTemplate"`
+	ResourceTemplate            *Resource            `json:"resourceTemplate"`
+	Port                        string               `json:"port"`
+	Host                        string               `json:"host"`
+	DbServer                    string               `json:"dbserver"`
+	DbPort                      string               `json:"dbport"`
+	StaticDirs                  []string             `json:"staticDirs"`
+}
+
 // Describes a Swagger-doc resource description
 type ResourceDescription struct {
 	SwaggerVersion string             `json:"swaggerVersion"`
