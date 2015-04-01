@@ -3,6 +3,7 @@ package dragonfruit
 import (
 	"encoding/json"
 	//"fmt"
+	"fmt"
 	"github.com/go-martini/martini"
 	"io/ioutil"
 	"net/http"
@@ -186,7 +187,32 @@ func addOperation(api *Api,
 				PathParams: outParams,
 				Body:       val,
 			}
-			doc, err := db.Update(q)
+			doc, err := db.Update(q, true)
+			if err != nil {
+				outerr, _ := json.Marshal(err.Error())
+				return 500, string(outerr)
+			}
+			out, err := json.Marshal(doc)
+			return 200, string(out)
+		})
+		break
+	case "PATCH":
+		m.Patch(path, func(params martini.Params, req *http.Request, db Db_backend, res http.ResponseWriter) (int, string) {
+			h := res.Header()
+
+			h.Add("Content-Type", "application/json;charset=utf-8")
+			val, err := ioutil.ReadAll(req.Body)
+			outParams, err := coercePathParam(params, op.Parameters)
+			if err != nil {
+				outerr, _ := json.Marshal(err.Error())
+				return 409, string(outerr)
+			}
+			q := QueryParams{
+				Path:       api.Path,
+				PathParams: outParams,
+				Body:       val,
+			}
+			doc, err := db.Update(q, false)
 			if err != nil {
 				outerr, _ := json.Marshal(err.Error())
 				return 500, string(outerr)
