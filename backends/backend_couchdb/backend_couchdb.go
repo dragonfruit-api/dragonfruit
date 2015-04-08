@@ -714,7 +714,7 @@ func (d *Db_backend_couch) ensureConnection() (err error) {
 		<-d.connection
 	}()
 
-	// only do this stuff if no one
+	// Block other attempts to ensure the connection while we're making sure it's connected.
 	d.connection <- true
 	err = d.client.Ping()
 	if err == nil {
@@ -731,18 +731,26 @@ func (d *Db_backend_couch) ensureConnection() (err error) {
 		var err error
 		fmt.Println("Waiting for couchdb to start...")
 		s_out, err := exec.Command("couchdb", "-s").CombinedOutput()
-		if err != nil {
-			fmt.Println("Launch error: ", err, "please send this to Peter O.")
+
+		z := []byte{10}
+		if bytes.Equal(z, s_out) {
+			time.Sleep(1000 * time.Millisecond)
+			return s()
 		}
+
 		if bytes.Contains(s_out, []byte("Apache CouchDB is running as process")) {
 			time.Sleep(1000 * time.Millisecond)
 			return err
 		}
 		if bytes.Contains(s_out, []byte("Apache CouchDB is not running.")) {
+			fmt.Println("not running")
 			time.Sleep(1000 * time.Millisecond)
 			return s()
 		}
-
+		if err != nil {
+			fmt.Println(s_out, string(s_out))
+			fmt.Println("Launch error: ", err, "please send this to Peter O.")
+		}
 		if err != nil {
 			return err
 		}
