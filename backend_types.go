@@ -54,7 +54,7 @@ type Db_backend interface {
 	Query(QueryParams) (interface{}, error)
 
 	// Update a document using a QueryParams struct
-	Update(QueryParams, bool) (interface{}, error)
+	Update(QueryParams, int) (interface{}, error)
 
 	// Insert a new document using a QueryParams struct
 	Insert(QueryParams) (interface{}, error)

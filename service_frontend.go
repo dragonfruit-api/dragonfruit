@@ -11,11 +11,21 @@ import (
 )
 
 var (
-	PathRe     *regexp.Regexp
-	ReqPathRe  *regexp.Regexp
-	GetDbRe    *regexp.Regexp
-	ViewPathRe *regexp.Regexp
-	m          *martini.ClassicMartini
+	PathRe      *regexp.Regexp
+	ReqPathRe   *regexp.Regexp
+	GetDbRe     *regexp.Regexp
+	ViewPathRe  *regexp.Regexp
+	EndOfPathRe *regexp.Regexp
+	PostPathRe  *regexp.Regexp
+	m           *martini.ClassicMartini
+)
+
+const (
+	GET = iota
+	PUT
+	PATCH
+	POST
+	DELETE
 )
 
 // init sets up some basic regular expressions used by the frontend and
@@ -25,6 +35,7 @@ func init() {
 	ReqPathRe = regexp.MustCompile("(/([[:word:]]*)/([[:word:]]*))")
 	GetDbRe = regexp.MustCompile("^/([[:word:]]*)/?")
 	ViewPathRe = regexp.MustCompile("(/([[:word:]]*)(/{[[:word:]]*})?)")
+	EndOfPathRe = regexp.MustCompile("[^/]+$")
 	m = martini.Classic()
 }
 
@@ -185,7 +196,7 @@ func addOperation(api *Api,
 				PathParams: outParams,
 				Body:       val,
 			}
-			doc, err := db.Update(q, true)
+			doc, err := db.Update(q, PUT)
 			if err != nil {
 				outerr, _ := json.Marshal(err.Error())
 				return 500, string(outerr)
@@ -210,7 +221,7 @@ func addOperation(api *Api,
 				PathParams: outParams,
 				Body:       val,
 			}
-			doc, err := db.Update(q, false)
+			doc, err := db.Update(q, PATCH)
 			if err != nil {
 				outerr, _ := json.Marshal(err.Error())
 				return 500, string(outerr)

@@ -1,255 +1,16 @@
 package backend_couchdb
 
 import (
-	"bytes"
 	"code.google.com/p/go-uuid/uuid"
 	"encoding/json"
 	"errors"
-	"fmt"
+	//"fmt"
 	"github.com/fjl/go-couchdb"
-	"github.com/gedex/inflector"
 	"github.com/ideo/dragonfruit"
-	"os/exec"
 	"reflect"
 	"strconv"
 	"strings"
-	"time"
 )
-
-// A CouchDB view.
-type view struct {
-	MapFunc    string `json:"map"`
-	ReduceFunc string `json:"reduce,omitempty"`
-}
-
-// A CouchDB design document.
-type viewDoc struct {
-	Id       string          `json:"_id"`
-	Rev      string          `json:"_rev,omitempty"`
-	Language string          `json:"language"`
-	Views    map[string]view `json:"views"`
-}
-
-// Db_backend_couch is the exported client that you would use in your app.
-type Db_backend_couch struct {
-	client     *couchdb.Client
-	connection chan bool
-}
-
-// viewParams are used to create design documents during the prep phase
-type viewParam struct {
-	path         string
-	singlepath   string
-	paramname    string
-	paramtype    string
-	propertyname string
-}
-
-// Represents a row returned by a couchdb result
-type couchdbRow struct {
-	Doc   map[string]interface{} `json:"doc,omitempty"`
-	Id    string                 `json:"id"`
-	Key   interface{}            `json:"key"`
-	Value map[string]interface{} `json:"value"`
-}
-
-// Represents a couchdb result
-type couchDbResponse struct {
-	Rows      []couchdbRow `json:"rows"`
-	Offset    int          `json:"offset"`
-	TotalRows int          `json:"total_rows"`
-	Limit     int          `json:"-"`
-}
-
-// modelizePath inflects a model name
-func modelizePath(modelName string) string {
-	return strings.Title(inflector.Singularize(modelName))
-}
-
-// modelizeContainer extracts a model name from a container for that model
-func modelizeContainer(container string) string {
-	return strings.Replace(container, strings.Title(dragonfruit.ContainerName), "", -1)
-}
-
-// Prep prepares a database to accept API data.
-// In this case, it creates a database (conventionally namped after the base
-// model that's returned and a design document for querying the docs.
-//
-// There are two types of views in the design document (although all of this
-// is mostly invisible to the front-end):
-//
-// - query views handle parameters passed via http GETs
-//
-// - path views handle parameters embedded in a path
-//
-// the Query method defines access rules and priorities
-func (d *Db_backend_couch) Prep(database string,
-	resource *dragonfruit.Resource) error {
-
-	vd := viewDoc{}
-	id := "_design/core"
-	vd.Id = id
-	vd.Views = make(map[string]view)
-	dbz, err := d.client.EnsureDB(database)
-	if err != nil {
-		return err
-	}
-
-	err = dbz.Get(id, &vd, nil)
-
-	vd.Language = "javascript"
-
-	// well this is ugly...
-	for _, api := range resource.Apis {
-		for _, operation := range api.Operations {
-			if operation.Method == "GET" {
-				vd.makePathParamView(api, operation, resource)
-				vd.makeQueryParamView(api, operation, resource)
-			}
-
-		}
-	}
-	d.Save(database, id, vd)
-	return nil
-}
-
-// Add adds a view to a view doc.
-func (vd *viewDoc) Add(viewname string, v view) {
-	vd.Views[viewname] = v
-}
-
-// makeQueryParamView creates views for filter queries (i.e. queries passed
-// through GET params)
-// TODO - range queries
-func (vd *viewDoc) makeQueryParamView(api *dragonfruit.Api,
-	op *dragonfruit.Operation,
-	resource *dragonfruit.Resource) {
-
-	responseModel := strings.Replace(op.Type, strings.Title(dragonfruit.ContainerName), "", -1)
-	model := resource.Models[responseModel]
-	for _, param := range op.Parameters {
-		if param.ParamType == "query" {
-			for propname, prop := range model.Properties {
-				if param.Name == propname {
-					if prop.Type != "array" {
-						viewname := makeQueryViewName(param.Name)
-						vw := view{}
-						vw.MapFunc = "function(doc){ emit(doc." + propname + ",doc); }"
-						vd.Add(viewname, vw)
-					}
-				}
-			}
-		}
-	}
-}
-
-// makePathParamView creates views for values passed through path parameters
-func (vd *viewDoc) makePathParamView(api *dragonfruit.Api,
-	op *dragonfruit.Operation,
-	resource *dragonfruit.Resource) {
-
-	matches := dragonfruit.PathRe.FindAllStringSubmatch(api.Path, -1)
-	viewname := makePathViewName(api.Path)
-
-	if len(matches) == 1 {
-		// regex voodoo
-		paramName := matches[0][4]
-		//pathName := matches[0][2]
-		vw := view{}
-		vw.MapFunc = "function(doc){ emit(doc." + paramName + ",doc); }"
-		vd.Add(viewname, vw)
-	}
-	if len(matches) > 1 {
-		vw := view{}
-		model := modelizePath(matches[0][2])
-		paramName := matches[0][4]
-		emit := make([]viewParam, 1)
-
-		emit[0] = viewParam{
-			path:         matches[0][2],
-			paramname:    paramName,
-			paramtype:    "id",
-			singlepath:   "doc",
-			propertyname: "doc",
-		}
-
-		for _, path := range matches[1:] {
-			propertyname, property := findPropertyFromPath(model, path[2], resource)
-			p := viewParam{
-				path:         path[2],
-				paramname:    path[4],
-				singlepath:   inflector.Singularize(path[2]),
-				propertyname: propertyname,
-			}
-			if path[4] == "pos" {
-				p.paramtype = "index"
-			} else {
-				p.paramtype = "id"
-			}
-			emit = append(emit, p)
-			if property != nil {
-				model = modelizeContainer(property.Ref)
-			}
-		}
-
-		emitholder := make([]string, 0)
-
-		vw.MapFunc = "function(doc){"
-		for idx, emitted := range emit[:(len(emit) - 1)] {
-			// for the join later
-
-			vw.MapFunc = vw.MapFunc + emitted.propertyname + "." + emit[(idx+1)].propertyname + ".forEach("
-			if emit[(idx+1)].paramtype == "index" {
-				vw.MapFunc = vw.MapFunc + " function(" + emit[(idx+1)].singlepath + "," + emit[(idx+1)].singlepath + "Index){ "
-			} else {
-				vw.MapFunc = vw.MapFunc + " function(" + emit[(idx+1)].singlepath + "){ "
-			}
-		}
-
-		for _, emitted := range emit {
-			var curvar string
-			if emitted.paramtype == "index" {
-				curvar = "(" + emitted.singlepath + "Index).toString()"
-			} else {
-				curvar = emitted.singlepath + "." + emitted.paramname
-			}
-			emitholder = append(emitholder, curvar)
-		}
-
-		vw.MapFunc = vw.MapFunc + " emit(["
-
-		vw.MapFunc = vw.MapFunc + strings.Join(emitholder, ",")
-
-		vw.MapFunc = vw.MapFunc + "]," + emit[len(emit)-1].singlepath + "); "
-
-		for _, _ = range emit[:(len(emit) - 1)] {
-			vw.MapFunc = vw.MapFunc + " } );"
-		}
-
-		vw.MapFunc = vw.MapFunc + "} "
-
-		vd.Add(viewname, vw)
-
-	}
-
-}
-
-// makeQueryViewName makes canonical view names for GET queries
-func makeQueryViewName(param string) string {
-	return "by_query_" + param
-}
-
-// makePathViewName makes canonical view names for path parameters
-func makePathViewName(path string) string {
-	matches := dragonfruit.ViewPathRe.FindAllStringSubmatch(path, -1)
-	out := make([]string, 0)
-
-	for _, match := range matches {
-		out = append(out, match[2])
-	}
-
-	return "by_path_" + strings.Join(out, "_")
-}
 
 // findPropertyFromPath introspects a path and returns the property that
 // corresponds to it.  So basically looks at something like /doc/1/stuff/3 and
@@ -289,40 +50,47 @@ func getDatabaseName(params dragonfruit.QueryParams) (database string) {
 	return
 }
 
-// Update updates a document
-// TODO - partial document updates
-func (d *Db_backend_couch) Update(params dragonfruit.QueryParams, fullOverwrite bool) (interface{},
-	error) {
-
-	doc, id, err := d.getRootDocument(params)
-	if err != nil {
-		return doc, err
-	}
+/* This function is rediculous */
+func (d *Db_backend_couch) getPathSpecificStuff(params dragonfruit.QueryParams) ([][]string,
+	couchdbRow, string, interface{}, error) {
+	var v interface{}
 
 	pathmap := dragonfruit.PathRe.FindAllStringSubmatch(params.Path, -1)
 
-	//pathmap = pathmap[1:len(pathmap)]
+	doc, id, err := d.getRootDocument(params)
 
-	var v interface{}
-	err = json.Unmarshal(params.Body, &v)
-
-	if v == nil {
-		return v, err
+	if err != nil {
+		return pathmap, doc, id, v, err
 	}
 
-	var manipulator func(reflect.Value, reflect.Value) (reflect.Value, error)
+	// unwrap the body of the document into an interface
+	if len(params.Body) > 0 {
+		err = json.Unmarshal(params.Body, &v)
+	}
 
-	if fullOverwrite {
-		manipulator = replace
-	} else {
-		manipulator = partialReplace
+	if v == nil {
+		return pathmap, doc, id, v, err
+	}
+
+	return pathmap, doc, id, v, nil
+}
+
+// Update updates a document
+// TODO - partial document updates
+func (d *Db_backend_couch) Update(params dragonfruit.QueryParams, operation int) (interface{},
+	error) {
+
+	pathmap, doc, id, v, err := d.getPathSpecificStuff(params)
+
+	if err != nil {
+		return nil, err
 	}
 
 	newdoc, partial, err := findSubDoc(pathmap[1:],
-		params.PathParams,
+		params,
 		reflect.ValueOf(doc.Value),
 		reflect.ValueOf(v),
-		manipulator)
+		operation)
 	database := getDatabaseName(params)
 	_, out, err := d.Save(database, id, newdoc.Interface())
 	if err != nil {
@@ -335,65 +103,51 @@ func (d *Db_backend_couch) Update(params dragonfruit.QueryParams, fullOverwrite 
 
 }
 
-func sanitizeDoc(doc interface{}) (interface{}, error) {
-	out, err := sanitizeDocInternal(reflect.ValueOf(doc))
-	if err != nil {
-		return doc, err
-	}
-	return out.Interface(), nil
-}
-
-func sanitizeDocInternal(doc reflect.Value) (reflect.Value, error) {
-	switch doc.Kind() {
-	default:
-		return doc, errors.New("invalid doc type")
-	case reflect.Interface:
-		return sanitizeDocInternal(doc.Elem())
-		break
-	case reflect.Map:
-
-		for _, key := range doc.MapKeys() {
-			if key.String() == "_id" ||
-				key.String() == "_rev" {
-
-				doc.SetMapIndex(key, reflect.ValueOf(nil))
-			}
-		}
-	}
-	return doc, nil
-}
-
 /* findSubDoc uses reflection to aSADSDhsadvghds what is that burnt toast smell? */
 func findSubDoc(pathslice [][]string,
-	pathParams map[string]interface{},
+	params dragonfruit.QueryParams,
 	document reflect.Value,
 	bodyParams reflect.Value,
-	// this would literally be easier in Haskell
-	manipulator func(reflect.Value, reflect.Value) (reflect.Value, error)) (reflect.Value, reflect.Value, error) {
+	operation int) (reflect.Value, reflect.Value, error) {
 
 	var partial reflect.Value
 
-	if len(pathslice) == 0 {
+	if len(pathslice) == 0 && (operation == dragonfruit.PUT || operation == dragonfruit.PATCH) {
 		switch bodyParams.Type().Kind() {
 		default:
 			return document, document, errors.New("Body Params must be a map.")
 			break
 		case reflect.Map:
+
+			var manipulator func(reflect.Value, reflect.Value) (reflect.Value, error)
+
+			if operation == dragonfruit.PUT {
+				manipulator = replace
+			} else {
+				manipulator = partialReplace
+			}
 			outdoc, err := manipulator(document, bodyParams)
 			return outdoc, outdoc, err
 		}
 
 	} else {
-		currKey := pathslice[0][4]
-		currItem := reflect.ValueOf(pathslice[0][2])
+		var currKey string
+		var currItem reflect.Value
+		if len(pathslice) > 0 {
+			currKey = pathslice[0][4]
+			currItem = reflect.ValueOf(pathslice[0][2])
+		} else {
+			endOfPath := dragonfruit.EndOfPathRe.FindStringSubmatch(params.Path)
+			currItem = reflect.ValueOf(endOfPath[0])
+		}
+
 		switch document.Type().Kind() {
 		default:
-			//fmt.Printf("unexpected type %T", document[currItem])
 			break
 
 		case reflect.Interface:
 			// if it's an interface, return the elem
-			newdoc, part, err := findSubDoc(pathslice, pathParams, document.Elem(), bodyParams, manipulator)
+			newdoc, part, err := findSubDoc(pathslice, params, document.Elem(), bodyParams, operation)
 			if err != nil {
 				return document, part, err
 			}
@@ -401,7 +155,8 @@ func findSubDoc(pathslice [][]string,
 			partial = part
 			break
 		case reflect.Map:
-			newdoc, part, err := findSubDoc(pathslice, pathParams, document.MapIndex(currItem), bodyParams, manipulator)
+
+			newdoc, part, err := findSubDoc(pathslice, params, document.MapIndex(currItem), bodyParams, operation)
 			if err != nil {
 				return document, part, err
 			}
@@ -409,6 +164,13 @@ func findSubDoc(pathslice [][]string,
 			partial = part
 			break
 		case reflect.Slice:
+			// the cyclomatic complexity is too damn high...
+
+			// for posts, add an element to the slice
+			if (operation == dragonfruit.POST) && (len(pathslice) == 0) {
+				newDoc := reflect.Append(document, bodyParams)
+				return newDoc, bodyParams, nil
+			}
 
 			for i := 0; i < document.Len(); i++ {
 				d := document.Index(i)
@@ -421,13 +183,27 @@ func findSubDoc(pathslice [][]string,
 					break
 				case reflect.Map:
 					vo := reflect.ValueOf(currKey)
-					if d.MapIndex(vo).Elem().String() == pathParams[currKey] {
-						newdoc, part, err := findSubDoc(pathslice[1:], pathParams, d, bodyParams, manipulator)
-						if err != nil {
-							return document, part, err
+					if d.MapIndex(vo).Elem().String() == params.PathParams[currKey] {
+
+						if operation == dragonfruit.DELETE {
+							if i == 0 {
+								document = document.Slice(1, document.Len())
+							} else if (i + 1) == document.Len() {
+								document = document.Slice(0, i)
+							} else {
+								document = reflect.AppendSlice(document.Slice(0, i), document.Slice(i+1, document.Len()))
+
+							}
+							partial = reflect.ValueOf(nil)
+						} else {
+							newdoc, part, err := findSubDoc(pathslice[1:], params, d, bodyParams, operation)
+							if err != nil {
+								return document, part, err
+							}
+							document.Index(i).Set(newdoc)
+							partial = part
 						}
-						document.Index(i).Set(newdoc)
-						partial = part
+
 					}
 				}
 
@@ -439,7 +215,6 @@ func findSubDoc(pathslice [][]string,
 	}
 
 	return document, partial, nil
-	//return v, nil
 }
 
 func (d *Db_backend_couch) getRootDocument(params dragonfruit.QueryParams) (couchdbRow, string, error) {
@@ -509,7 +284,26 @@ func (d *Db_backend_couch) Insert(params dragonfruit.QueryParams) (interface{},
 	if err != nil {
 		return nil, err
 	}
-	_, doc, err := d.Save(database, uuid.New(), document)
+
+	var doc interface{}
+	// if there are no path parameters, this is a new primary document
+	// just save it
+	if len(params.PathParams) == 0 {
+		_, doc, err = d.Save(database, uuid.New(), document)
+	} else {
+		pathmap, couchdoc, id, newDoc, err := d.getPathSpecificStuff(params)
+		if err != nil {
+			return doc, err
+		}
+		docVal, partialVal, err := findSubDoc(pathmap[1:],
+			params,
+			reflect.ValueOf(couchdoc.Value),
+			reflect.ValueOf(newDoc),
+			dragonfruit.POST)
+		_, _, err = d.Save(database, id, docVal.Interface())
+		doc = partialVal.Interface()
+	}
+
 	if err != nil {
 		return doc, err
 	}
@@ -517,26 +311,45 @@ func (d *Db_backend_couch) Insert(params dragonfruit.QueryParams) (interface{},
 	out, err := sanitizeDoc(doc)
 
 	return out, err
-
 }
 
 // Remove deletes a document from the database
-// TODO - remove subdocuments
 func (d *Db_backend_couch) Remove(params dragonfruit.QueryParams) error {
-	_, result, err := d.queryView(params)
-	if err != nil {
+	database := getDatabaseName(params)
+	if len(params.PathParams) == 1 {
+		_, result, err := d.queryView(params)
+		if err != nil {
+			return err
+		}
+
+		if len(result.Rows) == 0 {
+			return errors.New("not found error")
+		}
+
+		target := result.Rows[0]
+		id := target.Id
+		rev, err := d.client.DB(database).Rev(id)
+		return d.Delete(database, id, rev)
+	} else {
+		pathmap, couchdoc, id, newDoc, err := d.getPathSpecificStuff(params)
+		if err != nil {
+			return err
+		}
+
+		docVal, _, err := findSubDoc(pathmap[1:],
+			params,
+			reflect.ValueOf(couchdoc.Value),
+			reflect.ValueOf(newDoc),
+			dragonfruit.DELETE)
+
+		if err != nil {
+			return err
+		}
+
+		_, _, err = d.Save(database, id, docVal.Interface())
+
 		return err
 	}
-
-	if len(result.Rows) == 0 {
-		return errors.New("not found error")
-	}
-
-	target := result.Rows[0]
-	id := target.Id
-	database := getDatabaseName(params)
-	rev, err := d.client.DB(database).Rev(id)
-	return d.Delete(database, id, rev)
 
 }
 
@@ -709,62 +522,6 @@ func filterResultSet(result couchDbResponse, params dragonfruit.QueryParams,
 	return totalNum, outResult, nil
 }
 
-func (d *Db_backend_couch) ensureConnection() (err error) {
-	defer func() {
-		<-d.connection
-	}()
-
-	// Block other attempts to ensure the connection while we're making sure it's connected.
-	d.connection <- true
-	err = d.client.Ping()
-	if err == nil {
-		return
-	}
-
-	_, err = exec.Command("couchdb", "-b").Output()
-	if err != nil {
-		return err
-	}
-
-	var s func() error
-	s = func() error {
-		var err error
-		fmt.Println("Waiting for couchdb to start...")
-		s_out, err := exec.Command("couchdb", "-s").CombinedOutput()
-
-		z := []byte{10}
-		if bytes.Equal(z, s_out) {
-			time.Sleep(1000 * time.Millisecond)
-			return s()
-		}
-
-		if bytes.Contains(s_out, []byte("Apache CouchDB is running as process")) {
-			time.Sleep(1000 * time.Millisecond)
-			return err
-		}
-		if bytes.Contains(s_out, []byte("Apache CouchDB is not running.")) {
-			fmt.Println("not running")
-			time.Sleep(1000 * time.Millisecond)
-			return s()
-		}
-		if err != nil {
-			fmt.Println(s_out, string(s_out))
-			fmt.Println("Launch error: ", err, "please send this to Peter O.")
-		}
-		if err != nil {
-			return err
-		}
-
-		fmt.Println("So this happened: ", string(s_out), "... Please send this to Peter O.")
-		return errors.New(string(s_out))
-
-	}
-
-	err = s()
-
-	return
-}
-
 // Load loads a document from the database.
 // TODO - THIS WILL PROBABLY MOVE TO A NON-EXPORTED METHOD
 func (d *Db_backend_couch) Load(database string, documentId string, doc interface{}) error {
@@ -835,7 +592,6 @@ func (d *Db_backend_couch) pickView(params dragonfruit.QueryParams,
 		for _, v := range params.PathParams {
 			opts["key"] = v
 		}
-
 		return viewName, true
 	}
 
@@ -857,8 +613,9 @@ func (d *Db_backend_couch) pickView(params dragonfruit.QueryParams,
 	if ok {
 		opts["key"] = key
 	} else {
+		tmpMap := make(map[string]interface{})
 		opts["startkey"] = key
-		//opts["endkey"] = append(key, "{}")
+		opts["endkey"] = append(key, tmpMap)
 	}
 	return viewName, true
 
@@ -902,10 +659,4 @@ func (d *Db_backend_couch) findQueryView(params dragonfruit.QueryParams,
 		}
 	}
 	return "", false
-}
-
-// makeTypeName returns a content type from path parameters.
-func makeTypeName(path string) string {
-	matches := dragonfruit.ViewPathRe.FindAllStringSubmatch(path, -1)
-	return inflector.Singularize(matches[(len(matches) - 1)][2])
 }
