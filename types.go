@@ -14,32 +14,52 @@ const (
 
 // A configuration set for the service
 type Conf struct {
-	ContainerModels             []*Model             `json:"containerModels"`
-	CommonResponseCodes         []*ResponseMessage   `json:"commonResponseCodes"`
-	CommonGetParams             []*Property          `json:"commonGetParams"`
-	ResourceDescriptionTemplate *ResourceDescription `json:"resourceDescriptionTemplate"`
-	ResourceTemplate            *Resource            `json:"resourceTemplate"`
-	Port                        string               `json:"port"`
-	Host                        string               `json:"host"`
-	DbServer                    string               `json:"dbserver"`
-	DbPort                      string               `json:"dbport"`
-	StaticDirs                  []string             `json:"staticDirs"`
+	ContainerModels             []*Model           `json:"containerModels"`
+	CommonResponseCodes         []*ResponseMessage `json:"commonResponseCodes"`
+	CommonGetParams             []*Property        `json:"commonGetParams"`
+	ResourceDescriptionTemplate *Swagger           `json:"swagger"`
+	ResourceTemplate            *Resource          `json:"resourceTemplate"`
+	Port                        string             `json:"port"`
+	Host                        string             `json:"host"`
+	DbServer                    string             `json:"dbserver"`
+	DbPort                      string             `json:"dbport"`
+	StaticDirs                  []string           `json:"staticDirs"`
 }
 
 // Describes a Swagger-doc resource description
-type ResourceDescription struct {
-	SwaggerVersion string             `json:"swaggerVersion"`
-	APIs           []*ResourceSummary `json:"apis"`
-	ApiVersion     string             `json:"apiVersion"`
-	Info           struct {
-		Title       string `json:"title"`
-		Description string `json:"description"`
-		ToS         string `json:"termsOfServiceUrl"`
-		Contact     string `json:"contact"`
-		License     string `json:"license"`
-		LicenseUrl  string `json:"licenseUrl"`
+type Swagger struct {
+	Swagger string `json:"swagger"`
+	Info    struct {
+		Title          string          `json:"title"`
+		Description    string          `json:"description"`
+		TermsOfService string          `json:"termsOfService"`
+		Contact        ContactLicences `json:"contact"`
+		License        ContactLicences `json:"license"`
+		Version        string          `json:"version"`
 	} `json:"info"`
-	Authorizations map[string]*Authorization `json:"authorizations"`
+	Host                string                     `json:"host"`
+	BasePath            string                     `json:"basePath"`
+	Schemes             []string                   `json:"schemes"`
+	Consumes            []string                   `json:"consumes"`
+	Produces            []string                   `json:"produces"`
+	Paths               map[string]*PathItem       `json:"paths"`
+	Definitions         map[string]*Schema         `json:"definitions"`
+	Parameters          map[string]*Parameter      `json:"parameters"`
+	Responses           map[string]*Responses      `json:"responses"`
+	SecurityDefinitions map[string]*SecurityScheme `json:"securityDefinitions"`
+	Security            []*SecurityRequirement     `json:"security"`
+	Tags                []*Tag                     `json:"tags"`
+	ExternalDocs        struct {
+		Description string `json:"description"`
+		Url         string `json:"url"`
+	} `json:"externalDocs"`
+}
+
+// A swagger contact object
+type ContactLicences struct {
+	Name  string `json:"string"`
+	URL   string `json:"url"`
+	Email string `json:"email,omitempty"`
 }
 
 // Save the resource description to the database backend.
