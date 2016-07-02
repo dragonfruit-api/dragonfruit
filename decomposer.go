@@ -14,7 +14,7 @@ import (
 // Decompose is the only exported function in this file.  It takes a set of
 // sample data, introspects it and converts it into a map of Swagger models.
 // It returns the model map and/or any errors.
-func Decompose(sampledata []byte, baseType string, cnf Conf) (m map[string]*Model, err error) {
+func Decompose(sampledata []byte, baseType string, cnf Conf) (m map[string]*Schema, err error) {
 
 	var receiver interface{}
 
@@ -22,7 +22,7 @@ func Decompose(sampledata []byte, baseType string, cnf Conf) (m map[string]*Mode
 
 	basecontainers := cnf.ContainerModels
 
-	m = make(map[string]*Model)
+	m = make(map[string]*Schema)
 	m[strings.Title(ContainerName)] = basecontainers[0]
 	m["Metalist"] = basecontainers[1]
 
@@ -34,7 +34,7 @@ func Decompose(sampledata []byte, baseType string, cnf Conf) (m map[string]*Mode
 	}
 
 	v := reflect.ValueOf(receiver)
-	buildModel(baseType, m, v)
+	buildSchema(baseType, m, v)
 
 	return
 
@@ -42,37 +42,32 @@ func Decompose(sampledata []byte, baseType string, cnf Conf) (m map[string]*Mode
 
 // appendSubtype appends container types to models within the model map.
 // It returns the subtype name (whether it's new or extant).
-func appendSubtype(baseSubtype string, m map[string]*Model) string {
+func appendSubtype(baseSubtype string, d map[string]*Schema) string {
 	cname := strings.Title(ContainerName)
+
 	// the canonical name of the subtype container
 	subtype := strings.Title(baseSubtype + cname)
 
-	// check to see if the subtype has been defined
-	// ugh
-	for _, v := range m[cname].SubTypes {
-		if subtype == v {
-			return subtype
-		}
-	}
-
-	// add the subtype to the model's list of subtypes
-	m[cname].SubTypes = append(m[cname].SubTypes, subtype)
-
 	// Create a new model in the model list
-	m[subtype] = new(Model)
-	m[subtype].Id = subtype
-	m[subtype].Description = "A container for " + inflector.Pluralize(baseSubtype)
-	m[subtype].Properties = make(map[string]*Property)
-	m[subtype].Properties["results"] = &Property{
+	d[subtype] = &Schema{}
+	d[subtype].Title = subtype
+	d[subtype].Description = "A container for " + inflector.Pluralize(baseSubtype)
+	d[subtype].Properties = make(map[string]*Schema)
+	d[subtype].Properties["results"] = &Schema{
 		Type: "array",
-		Items: &ItemsRef{
+		Items: &Schema{
 			Ref: strings.Title(baseSubtype),
 		},
 	}
+	d[subtype].Properties["containerType"] = &Schema{
+		Type: "string",
+	}
+	d[subtype].Required = []string{"containerType"}
+	d[subtype].AllOf = []*Schema{d[cname]}
 	return subtype
 }
 
-// buildModel initializes a new model.  It adds the new model to the model map
+// buildSchema initializes a new model.  It adds the new model to the model map
 // and then creates new properties as needed.
 //
 // If the model exists for some reason (if for example a piece of sample data
@@ -83,16 +78,16 @@ func appendSubtype(baseSubtype string, m map[string]*Model) string {
 //
 // Returns an error.
 // TODO - this should probably be a method not a function.
-func buildModel(baseType string,
-	m map[string]*Model,
+func buildSchema(baseType string,
+	m map[string]*Schema,
 	v reflect.Value) (err error) {
 
 	baseType = strings.Title(baseType)
 	_, ok := m[baseType]
 	if !ok {
-		m[baseType] = &Model{
-			Id:         baseType,
-			Properties: make(map[string]*Property),
+		m[baseType] = &Schema{
+			Title:      baseType,
+			Properties: make(map[string]*Schema),
 		}
 	}
 
@@ -112,23 +107,23 @@ func buildModel(baseType string,
 // TODO - this should probably be a method not a function.
 func buildProperty(propName string,
 	modelName string,
-	models map[string]*Model,
+	models map[string]*Schema,
 	v reflect.Value,
 ) (err error) {
 	datatype, sanitized := translateKind(v)
 
 	switch datatype {
 	case "model":
-		prop := &Property{
+		prop := &Schema{
 			Ref: strings.Title(propName),
 		}
-		buildModel(propName, models, sanitized)
+		buildSchema(propName, models, sanitized)
 		models[modelName].Properties[propName] = prop
 		break
 
 	case "array":
-		iref := new(ItemsRef)
-		prop := &Property{}
+		iref := &Schema{}
+		prop := &Schema{}
 		prop.buildSliceProperty(inflector.Singularize(propName), iref, sanitized, models)
 
 		// always pluralize array stuff
@@ -147,7 +142,7 @@ func buildProperty(propName string,
 		break
 
 	default:
-		prop := &Property{
+		prop := &Schema{
 			Type: datatype,
 		}
 		models[modelName].Properties[propName] = prop
@@ -160,8 +155,8 @@ func buildProperty(propName string,
 // processString builds a new property from a string value in sample data.
 // It checks for enumerated values and adds optional format data if appropriate.
 // It returns a pointer to a new property.
-func processString(v reflect.Value) *Property {
-	prop := &Property{Type: "string"}
+func processString(v reflect.Value) *Schema {
+	prop := &Schema{Type: "string"}
 
 	tst := v.String()
 
@@ -176,7 +171,7 @@ func processString(v reflect.Value) *Property {
 // processSplit handles enumerated value hints (basically, strings with a pipe
 // symbol).
 // It mutates the property passed to it.
-func (prop *Property) processSplit(str string) {
+func (prop *Schema) processSplit(str string) {
 	split := strings.Split(str, "|")
 
 	// test for max and min values
@@ -206,12 +201,12 @@ func (prop *Property) processSplit(str string) {
 			// else assume they are strings
 		} else {
 			prop.Type = "string"
-			prop.Enum = split
+			prop.Enum = stringSliceToInterface(split)
 			prop.Format, _ = introspectFormat(split[0])
 		}
 
 	} else {
-		prop.Enum = split
+		prop.Enum = stringSliceToInterface(split)
 		prop.Type = "string"
 		prop.Format, _ = introspectFormat(split[0])
 	}
@@ -221,8 +216,8 @@ func (prop *Property) processSplit(str string) {
 // processNumber determines if the value is a float or an integer
 // It returns a property reference with the number type.
 // TODO - should this just return a string?
-func processNumber(v reflect.Value) *Property {
-	prop := &Property{}
+func processNumber(v reflect.Value) *Schema {
+	prop := &Schema{}
 	if math.Trunc(v.Float()) == v.Float() {
 		prop.Type = "integer"
 	} else {
@@ -236,19 +231,19 @@ func processNumber(v reflect.Value) *Property {
 // element, determines its type, and traverses deeper into the model tree if
 // the first element is a model type.
 // It returns an error if something blows up.
-func (prop *Property) buildSliceProperty(name string, i *ItemsRef,
+func (prop *Schema) buildSliceProperty(name string, i *Schema,
 	v reflect.Value,
-	m map[string]*Model) (err error) {
+	m map[string]*Schema) (err error) {
 
 	prop.Type = "array"
 	for it := 0; it < v.Len(); it++ {
 		datatype, sanitized := translateKind(v.Index(it))
 		switch datatype {
 		case "model":
-			buildModel(name, m, sanitized)
+			buildSchema(name, m, sanitized)
 			appendSubtype(name, m)
-			prop.Items = &ItemsRef{}
-			prop.Items.Ref = strings.Title(name)
+			prop.Items = &Schema{}
+			prop.Items.Ref = makeRef(strings.Title(name))
 			break
 		default:
 			prop.Type = "array"
@@ -354,6 +349,18 @@ func translateKind(v reflect.Value) (datatype string, sanitized reflect.Value) {
 	case reflect.Slice:
 		datatype = "array"
 		break
+	}
+	return
+}
+
+func makeRef(defName string) string {
+	return "#/definitions/" + defName
+}
+
+func stringSliceToInterface(in []string) (out []interface{}) {
+	out = make([]interface{}, len(in))
+	for index, value := range in {
+		out[index] = value
 	}
 	return
 }

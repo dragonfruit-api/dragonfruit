@@ -7,44 +7,44 @@ import (
 
 // getCommonResponseCodes loads a set of response codes that most of the APIs
 // return.
-func getCommonResponseCodes(cnf Conf) []*ResponseMessage {
+func getCommonResponseCodes(cnf Conf) []*Response {
 
-	return cnf.CommonResponseCodes
+	return cnf.CommonResponses
 }
 
 // getCommonGetParams loads a set of common params that should be added to
 // all collection get operations (like limit and offset).
-func getCommonGetParams(cnf Conf) []*Property {
+func getCommonGetParams(cnf Conf) []*Parameter {
 	return cnf.CommonGetParams
 }
 
 // LoadDescriptionFromDb loads a resource description from a database backend.
 // (see the backend stuff and types).
 func LoadDescriptionFromDb(db Db_backend,
-	cnf Conf) (*ResourceDescription, error) {
+	cnf Conf) (*Swagger, error) {
 
-	rd := new(ResourceDescription)
+	rd := new(Swagger)
 	err := db.Load(SwaggerResourceDB, ResourceDescriptionName, rd)
 
 	if err != nil {
 		//TODO - fix this stupid shadowing issue
-		rd = cnf.ResourceDescriptionTemplate
+		rd = cnf.SwaggerTemplate
 		return rd, nil
 	}
 	return rd, err
 }
 
-// LoadResourceFromDb loads a resource from a database backend
+// LoadPathFromDb loads a resource from a database backend
 // (see the backend stuff and types).
-func LoadResourceFromDb(db Db_backend,
-	resourcePath string, cnf Conf) (*Resource, error) {
+func LoadPathFromDb(db Db_backend,
+	pathName string, cnf Conf) (*PathItem, error) {
 
-	res := new(Resource)
-	err := db.Load(SwaggerResourceDB, ResourceStem+resourcePath, &res)
+	res := &PathItem{}
+	err := db.Load(SwaggerResourceDB, ResourceStem+pathName, &res)
 
 	// doc wasn't found
 	if err != nil {
-		res = cnf.ResourceTemplate
+		res = cnf.PathTemplate
 		return res, nil
 	}
 
@@ -54,63 +54,47 @@ func LoadResourceFromDb(db Db_backend,
 // MakeCommonAPIs creates a set of operations and APIs for a model.
 // For any model passed to the function, two paths are created with the
 // following operations on each:
-// /{resourceRoot} (GET and POST)
-// /{resourceRoot}/{id} (GET, PUT, PATCH, DELETE)
+// /{pathRoot} (GET and POST)
+// /{pathRoot}/{id} (GET, PUT, PATCH, DELETE)
 func MakeCommonAPIs(
 	prefix string,
-	resourceRoot string,
-	modelName string,
-	modelMap map[string]*Model,
-	upstreamParams []*Property,
+	pathRoot string,
+	schemaName string,
+	schemaMap map[string]*Schema,
+	upstreamParams []*Parameter,
 	cnf Conf,
-) []*Api {
+) map[string]*PathItem {
 
-	model := modelMap[modelName]
-	out := make([]*Api, 0)
-	modelDescription := inflector.Pluralize(inflector.Singularize(modelName))
+	schema := schemaMap[schemaName]
+	out := make(map[string]*PathItem)
+	modelDescription := inflector.Pluralize(inflector.Singularize(schemaName))
 
 	// make the collection api - get lists of models and create new models
-	collApi := &Api{
-		Path:        prefix + "/" + resourceRoot,
-		Description: "Operations on collections of " + modelDescription,
-	}
+	collectionPath := prefix + "/" + pathRoot
+	collectionApi := &PathItem{}
+	collectionApi.Get = makeCollectionOperation(schemaName, schema, upstreamParams, cnf)
+	collectionApi.Post = makePostOperation(schemaName, schema, upstreamParams, cnf)
 
-	// make the colleciton operations and parse the sub parts
-	getOp := makeCollectionOperation(modelName, model, upstreamParams, cnf)
-	collApi.Operations = append(collApi.Operations, getOp)
-
-	postOp := makePostOperation(modelName, model, upstreamParams, cnf)
-	collApi.Operations = append(collApi.Operations, postOp)
+	out[collectionPath] = collectionApi
 
 	// make a single API - use this for sub collections too
-	idName, idparam := makePathId(model)
+	idName, idparam := makePathId(schema)
 	upstreamParams = append(upstreamParams, idparam)
 
-	singleApi := &Api{
-		Path:        prefix + "/" + resourceRoot + "/{" + idName + "}",
-		Description: "Operations on single instances of " + modelDescription,
-	}
-
 	// TODO - parallelize this...
+	individualPath := prefix + "/" + pathRoot + "/{" + idName + "}"
+	individualApi := &PathItem{}
+	individualApi.Get = makeSingleGetOperation(schemaName, schema, upstreamParams, cnf)
+	individualApi.Put = makePutOperation(schemaName, schema, upstreamParams, cnf)
+	individualApi.Patch = makePatchOperation(schemaName, schema, upstreamParams, cnf)
+	individualApi.Delete = makeDeleteOperation(schemaName, schema, upstreamParams, cnf)
 
-	out = append(out, collApi)
+	out[individualPath] = individualApi
 
-	getSingleOp := makeSingleGetOperation(modelName, model, upstreamParams, cnf)
-	singleApi.Operations = append(singleApi.Operations, getSingleOp)
-
-	putOp := makePutOperation(modelName, model, upstreamParams, cnf)
-	singleApi.Operations = append(singleApi.Operations, putOp)
-
-	patchOp := makePatchOperation(modelName, model, upstreamParams, cnf)
-	singleApi.Operations = append(singleApi.Operations, patchOp)
-
-	deleteOp := makeDeleteOperation(modelName, model, upstreamParams, cnf)
-	singleApi.Operations = append(singleApi.Operations, deleteOp)
-
-	out = append(out, singleApi)
-
-	subApis := makeSubApis(singleApi.Path, model, modelMap, upstreamParams, cnf)
-	out = append(out, subApis...)
+	subApis := makeSubApis(individualPath, schema, schemaMap, upstreamParams, cnf)
+	for k, v := range subApis {
+		out[k] = v
+	}
 
 	return out
 }
@@ -118,23 +102,24 @@ func MakeCommonAPIs(
 // makeSubApis creates APIs for arrays of models which appear in models.
 func makeSubApis(
 	prefix string,
-	model *Model,
-	modelMap map[string]*Model,
-	upstreamParams []*Property,
+	schema *Schema,
+	schemaMap map[string]*Schema,
+	upstreamParams []*Parameter,
 	cnf Conf,
-) []*Api {
+) map[string]*PathItem {
 
-	out := make([]*Api, 0)
-	for _, prop := range model.Properties {
-		// TODO - HANDLE SUB-APIS FOR ARRAYS OF PRIMITIVE VALUES
-		if (prop.Type == "array") && (prop.Items.Ref != "") {
-			subModelName := prop.Items.Ref
+	out := make(map[string]*PathItem)
+	for propName, propSchema := range schema.Properties {
+		if (propSchema.Type == "array") && (propSchema.Items.Ref != "") {
+			subModelName := propSchema.Items.Ref
 			st := inflector.Pluralize(inflector.Singularize(subModelName))
 			resourceroot := strings.ToLower(st)
 			commonApis := MakeCommonAPIs(prefix, resourceroot, subModelName,
-				modelMap, upstreamParams, cnf)
+				schemaMap, upstreamParams, cnf)
 
-			out = append(out, commonApis...)
+			for k, v := range commonApis {
+				out[k] = v
+			}
 		}
 	}
 	return out
@@ -142,64 +127,72 @@ func makeSubApis(
 
 // makePathId determines what property to use as the ID param when for paths
 // which have parameterized IDs (e.g. /model_name/{id}
-func makePathId(model *Model) (propName string, idparam *Property) {
+func makePathId(schema *Schema) (propName string, idparam *Parameter) {
 	// find a property with "ID" in the name
-	for propName, propValue := range model.Properties {
+	for propName, propValue := range schema.Properties {
 
 		// The property must be a primitive value - it can't be an array
 		// or a reference to another model
 		if propValue.Type != "array" && propValue.Ref == "" {
 			if propName == "id" {
-				idparam = &Property{
-					Name:      propName,
-					Type:      propValue.Type,
-					ParamType: "path",
-					Format:    propValue.Format,
-					Required:  true,
+				idparam = &Parameter{
+					Name:     propName,
+					Type:     propValue.Type,
+					In:       "path",
+					Format:   propValue.Format,
+					Required: true,
 				}
 				return propName, idparam
 			}
 
 			if strings.Contains(propName, "Id") && propValue.Type != "" {
-				idparam = &Property{
-					Name:      propName,
-					Type:      propValue.Type,
-					ParamType: "path",
-					Format:    propValue.Format,
-					Required:  true,
+				idparam = &Parameter{
+					Name:     propName,
+					Type:     propValue.Type,
+					In:       "path",
+					Format:   propValue.Format,
+					Required: true,
 				}
 				return propName, idparam
 			}
 		}
 	}
 
-	// if there's no ID parameter, use the position in the array as
-	// the ID
-	idparam = &Property{
-		Name:      "pos",
-		Type:      "integer",
-		ParamType: "path",
-		Required:  true,
+	// if there's no ID parameter, make one and mutate the schema
+	// this is bad, but if you don't name your fields, that's what you
+	// get I suppose
+	propname := schema.Title + "Id"
+	idparam = &Parameter{
+		Name:     propname,
+		Type:     "integer",
+		In:       "path",
+		Required: true,
 	}
-	return "pos", idparam
+
+	// mutation...
+	schema.Properties[propname] = &Schema{
+		Title: propname,
+		Type:  "integer",
+	}
+	schema.Required = []string{propname}
+	return propname, idparam
 }
 
 // makeDeleteOperation creates operations to delete single instances of a model.
-func makeDeleteOperation(modelName string,
-	model *Model, upstreamParams []*Property, cnf Conf) (deleteOp *Operation) {
+func makeDeleteOperation(schemaName string,
+	schema *Schema, upstreamParams []*Parameter, cnf Conf) (deleteOp *Operation) {
 
 	deleteOp = &Operation{
-		Method:   "DELETE",
-		Type:     "void",
-		Nickname: "delete" + modelName,
-		Summary:  "Delete a " + modelName + " object.",
+		OperationId: "delete" + schemaName,
+		Summary:     "Delete a " + schemaName + " object.",
 	}
 
-	deleteResp := &ResponseMessage{
-		Code:    200,
-		Message: "Successfully deleted",
+	responseSchema := buildSimpleResponseSchema(200, "Successfully deleted")
+
+	deleteOp.Responses[200] = &Response{
+		Description: "Successful deletion",
+		Schema:      responseSchema,
 	}
-	deleteOp.ResponseMessages = append(getCommonResponseCodes(cnf), deleteResp)
 
 	deleteOp.Parameters = append(deleteOp.Parameters, upstreamParams...)
 	return
@@ -208,55 +201,57 @@ func makeDeleteOperation(modelName string,
 
 // makeSingleGetOperation makes operations to load single instances of models.
 // Basically for URLs ending /{model id}.
-func makeSingleGetOperation(modelName string, model *Model,
-	upstreamParams []*Property, cnf Conf) (patchOp *Operation) {
+func makeSingleGetOperation(schemaName string, schema *Schema,
+	upstreamParams []*Parameter, cnf Conf) (getOp *Operation) {
 
-	patchOp = &Operation{
-		Method:   "GET",
-		Type:     modelName + strings.Title(ContainerName),
-		Nickname: "getSingle" + modelName,
-		Summary:  "Get a single " + modelName + " object.",
+	getOp = &Operation{
+		OperationId: "getSingle" + schemaName,
+		Summary:     "Get a single " + schemaName + " object.",
 	}
+
+	ref := makeRef(schemaName + strings.Title(ContainerName))
 
 	// Add a 200 response for successful operations
-	putResp := &ResponseMessage{
-		Code:          200,
-		Message:       "Ok",
-		ResponseModel: modelName + strings.Title(ContainerName),
+	getOp.Responses[200] = &Response{
+		Schema: &Schema{
+			Ref: ref,
+		},
+		Description: "A single " + schemaName,
 	}
-	patchOp.ResponseMessages = append(getCommonResponseCodes(cnf), putResp)
 
-	patchOp.Parameters = append(patchOp.Parameters, upstreamParams...)
+	getOp.Parameters = append(getOp.Parameters, upstreamParams...)
 	return
 }
 
 // makePatchOperation creates operations to partially update models.
-func makePatchOperation(modelName string, model *Model,
-	upstreamParams []*Property, cnf Conf) (patchOp *Operation) {
+func makePatchOperation(schemaName string, schema *Schema,
+	upstreamParams []*Parameter, cnf Conf) (patchOp *Operation) {
 	// Create the put operation
 
 	patchOp = &Operation{
-		Method:   "PATCH",
-		Type:     modelName,
-		Nickname: "updatePartial" + modelName,
-		Summary:  "Partially update a  " + modelName + " object.",
+		OperationId: "updatePartial" + schemaName,
+		Summary:     "Partially update a  " + schemaName + " object.",
+	}
+
+	ref := makeRef(schemaName + strings.Title(ContainerName))
+
+	ioSchema := &Schema{
+		Ref: ref,
 	}
 
 	// Add a 200 response for successful operations
-	putResp := &ResponseMessage{
-		Code:          200,
-		Message:       "Successfully updated",
-		ResponseModel: modelName,
+	patchOp.Responses[200] = &Response{
+		Schema:      ioSchema,
+		Description: "Successfully updated " + schemaName,
 	}
-	patchOp.ResponseMessages = append(getCommonResponseCodes(cnf), putResp)
 
 	// The patch body
-	bodyParam := &Property{
-		Name:      "body",
-		ParamType: "body",
-		Ref:       modelName,
-		Required:  true,
-		Type:      modelName,
+	bodyParam := &Parameter{
+		Name:        "body",
+		In:          "body",
+		Description: "A partial " + schemaName,
+		Required:    true,
+		Schema:      ioSchema,
 	}
 
 	patchOp.Parameters = append(patchOp.Parameters, bodyParam)
@@ -265,32 +260,34 @@ func makePatchOperation(modelName string, model *Model,
 }
 
 // makePutOperation creates operations to update models.
-func makePutOperation(modelName string,
-	model *Model, upstreamParams []*Property, cnf Conf) (putOp *Operation) {
+func makePutOperation(schemaName string, schema *Schema,
+	upstreamParams []*Parameter, cnf Conf) (putOp *Operation) {
 
 	// Create the put operation
 	putOp = &Operation{
-		Method:   "PUT",
-		Type:     modelName,
-		Nickname: "update" + modelName,
-		Summary:  "Update a " + modelName + " object.",
+		OperationId: "update" + schemaName,
+		Summary:     "Update a " + schemaName + " object.",
+	}
+
+	ref := makeRef(schemaName + strings.Title(ContainerName))
+
+	ioSchema := &Schema{
+		Ref: ref,
 	}
 
 	// Add a 200 response for successful operations
-	putResp := &ResponseMessage{
-		Code:          200,
-		Message:       "Successfully updated",
-		ResponseModel: modelName,
+	putOp.Responses[200] = &Response{
+		Schema:      ioSchema,
+		Description: "Successfully updated " + schemaName,
 	}
-	putOp.ResponseMessages = append(getCommonResponseCodes(cnf), putResp)
 
-	// The put body
-	bodyParam := &Property{
-		Name:      "body",
-		ParamType: "body",
-		Ref:       modelName,
-		Required:  true,
-		Type:      modelName,
+	// The patch body
+	bodyParam := &Parameter{
+		Name:        "body",
+		In:          "body",
+		Description: "A partial " + schemaName,
+		Required:    true,
+		Schema:      schema,
 	}
 
 	putOp.Parameters = append(putOp.Parameters, bodyParam)
@@ -299,31 +296,31 @@ func makePutOperation(modelName string,
 }
 
 // makePostOperation makes a POST operation to create new instances of models.
-func makePostOperation(modelName string,
-	model *Model, upstreamParams []*Property, cnf Conf) (postOp *Operation) {
+func makePostOperation(schemaName string, schema *Schema,
+	upstreamParams []*Parameter, cnf Conf) (postOp *Operation) {
 
 	postOp = &Operation{
-		Method:   "POST",
-		Type:     modelName,
-		Nickname: "new" + modelName,
-		Summary:  "Create a new " + modelName + " object.",
+		OperationId: "new" + schemaName,
+		Summary:     "Create a new " + schemaName + " object.",
 	}
+	ref := makeRef(schemaName + strings.Title(ContainerName))
 
+	ioSchema := &Schema{
+		Ref: ref,
+	}
 	// Add a 201 response for newly created models
-	postResp := &ResponseMessage{
-		Code:          201,
-		Message:       "Successfully created",
-		ResponseModel: modelName,
-	}
-	postOp.ResponseMessages = append(getCommonResponseCodes(cnf), postResp)
+	postResp := &Response{
 
+		Schema: ioSchema,
+	}
+	postOp.Responses[201] = postResp
 	// Post body to create the new model.
-	bodyParam := &Property{
-		Name:      "body",
-		ParamType: "body",
-		Ref:       modelName,
-		Required:  true,
-		Type:      modelName,
+	bodyParam := &Parameter{
+		Name:        "body",
+		In:          "body",
+		Schema:      schema,
+		Required:    true,
+		Description: "A new " + schemaName,
 	}
 	postOp.Parameters = append(postOp.Parameters, bodyParam)
 	postOp.Parameters = append(postOp.Parameters, upstreamParams...)
@@ -333,25 +330,27 @@ func makePostOperation(modelName string,
 
 // makeCollectionOperations defines GET calls for collections of the model.
 // Basically, GET operations on URLs ending with /
-func makeCollectionOperation(modelName string, model *Model, upstreamParams []*Property, cnf Conf) (getOp *Operation) {
+func makeCollectionOperation(schemaName string, schema *Schema,
+	upstreamParams []*Parameter, cnf Conf) (getOp *Operation) {
 	getOp = &Operation{
-		Method:   "GET",
-		Type:     modelName + strings.Title(ContainerName),
-		Nickname: "get" + modelName + "Collection",
-		Summary:  "Get multiple " + modelName + " objects.",
+		OperationId: "get" + schemaName + "Collection",
+		Summary:     "Get multiple " + schemaName + " objects.",
 	}
 
-	// add the response messages
-	getResp := &ResponseMessage{
-		Code:          200,
-		Message:       "Successful Lookup",
-		ResponseModel: modelName + strings.Title(ContainerName),
+	ref := makeRef(schemaName + strings.Title(ContainerName))
+
+	ioSchema := &Schema{
+		Ref: ref,
 	}
-	getOp.ResponseMessages = append(getCommonResponseCodes(cnf), getResp)
+
+	getOp.Responses[200] = &Response{
+		Schema:      ioSchema,
+		Description: "A collection of " + schemaName,
+	}
 
 	// add the parameters
 	getOp.Parameters = getCommonGetParams(cnf)
-	for propName, prop := range model.Properties {
+	for propName, prop := range schema.Properties {
 		switch prop.Type {
 		// if there is no type, the item is a ref
 		// don't add any properties...
@@ -395,13 +394,13 @@ slices are always returned to keep the API consistent. */
 
 // makeGenParam makes a generic parameter using the type, enum, name and
 // format of the property.
-func makeGenParams(propName string, prop *Property) (p []*Property) {
-	pr := &Property{
-		Type:      prop.Type,
-		Enum:      prop.Enum,
-		ParamType: "query",
-		Name:      propName,
-		Format:    prop.Format,
+func makeGenParams(propName string, schema *Schema) (p []*Parameter) {
+	pr := &Parameter{
+		Type:   schema.Type,
+		Enum:   schema.Enum,
+		In:     "query",
+		Name:   propName,
+		Format: schema.Format,
 	}
 	p = append(p, pr)
 	return
@@ -409,12 +408,12 @@ func makeGenParams(propName string, prop *Property) (p []*Property) {
 
 // makeArrayParam makes a parameter to query elements in an array of primitive
 // values.  The type and format are used from the array's Item property.
-func makeArrayParams(propName string, prop *Property) (p []*Property) {
-	pr := &Property{
-		Name:      propName,
-		Type:      prop.Items.Type,
-		Format:    prop.Items.Format,
-		ParamType: "query",
+func makeArrayParams(propName string, schema *Schema) (p []*Parameter) {
+	pr := &Parameter{
+		Name:   propName,
+		Type:   schema.Items.Type,
+		Format: schema.Items.Format,
+		In:     "query",
 	}
 	p = append(p, pr)
 	return
@@ -422,20 +421,27 @@ func makeArrayParams(propName string, prop *Property) (p []*Property) {
 
 // makeNumParam makes query parameters for numerical values.  If the
 // property does NOT have an enum property, a range query is defined.
-func makeNumParams(propName string, prop *Property) (p []*Property) {
-	pr := &Property{
-		Type:      prop.Type,
-		Minimum:   prop.Minimum,
-		Maximum:   prop.Maximum,
-		Format:    prop.Format,
-		ParamType: "query",
-		Name:      propName,
+func makeNumParams(propName string, schema *Schema) (p []*Parameter) {
+	pr := &Parameter{
+		Type:    schema.Type,
+		Minimum: schema.Minimum,
+		Maximum: schema.Maximum,
+		Format:  schema.Format,
+		In:      "query",
+		Name:    propName,
 	}
 	p = append(p, pr)
 
 	if len(pr.Enum) == 0 {
 		prRange := pr
-		prRange.AllowMultiple = true
+		prRange.Type = "array"
+		prRange.Items = &Items{
+			Type:    schema.Type,
+			Minimum: schema.Minimum,
+			Maximum: schema.Maximum,
+			Format:  schema.Format,
+		}
+		prRange.CollectionFormat = "csv"
 		prRange.Name = propName + "Range"
 		p = append(p, prRange)
 	}
@@ -445,22 +451,46 @@ func makeNumParams(propName string, prop *Property) (p []*Property) {
 
 // makeStringParams makes query parameters for string values.  If the
 // property is a date or date-time, it adds a range query as well.
-func makeStringParams(propName string, prop *Property) (p []*Property) {
-	pr := &Property{
-		Type:      prop.Type,
-		Enum:      prop.Enum,
-		ParamType: "query",
-		Name:      propName,
-		Format:    prop.Format,
+func makeStringParams(propName string, schema *Schema) (p []*Parameter) {
+	pr := &Parameter{
+		Type:   schema.Type,
+		Enum:   schema.Enum,
+		In:     "query",
+		Name:   schemaName,
+		Format: schema.Format,
 	}
 	p = append(p, pr)
-	if (prop.Format == "date" || prop.Format == "date-time") && len(prop.Enum) == 0 {
-		rangeField := pr
+	if (schema.Format == "date" || schema.Format == "date-time") && len(schema.Enum) == 0 {
+		rangeField := &Parameter{
+			Type:   "array",
+			In:     "query",
+			Name:   schemaName,
+			Format: schema.Format,
+		}
 		rangeField.Name = propName + "Range"
 		rangeField.AllowMultiple = true
 
 		p = append(p, rangeField)
 	}
 
+	return
+}
+
+// Convenience function for building simple code/message responses
+func buildSimpleResponseSchema(code int, message string) (out *Schema) {
+	out.Properties["code"] = &Schema{
+		Type: "integer",
+	}
+	out.Properties["message"] = &Schema{
+		Type: "string",
+	}
+	out.Required = []string{"type", "message"}
+	out.Example = struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	}{
+		code,
+		message,
+	}
 	return
 }

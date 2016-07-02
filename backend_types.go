@@ -64,5 +64,5 @@ type Db_backend interface {
 
 	// Prep prepares a database to serve a new API.  For example, create
 	// tables or collections, create views, etc.
-	Prep(string, *Resource) error
+	Prep(string, *Swagger) error
 }

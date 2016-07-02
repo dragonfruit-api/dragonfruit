@@ -1,7 +1,7 @@
 package dragonfruit
 
 import (
-	"strings"
+//"strings"
 )
 
 const (
@@ -14,152 +14,230 @@ const (
 
 // A configuration set for the service
 type Conf struct {
-	ContainerModels             []*Model           `json:"containerModels"`
-	CommonResponseCodes         []*ResponseMessage `json:"commonResponseCodes"`
-	CommonGetParams             []*Property        `json:"commonGetParams"`
-	ResourceDescriptionTemplate *Swagger           `json:"swagger"`
-	ResourceTemplate            *Resource          `json:"resourceTemplate"`
-	Port                        string             `json:"port"`
-	Host                        string             `json:"host"`
-	DbServer                    string             `json:"dbserver"`
-	DbPort                      string             `json:"dbport"`
-	StaticDirs                  []string           `json:"staticDirs"`
+	ContainerModels []*Schema    `json:"containerModels"`
+	CommonResponses []*Response  `json:"commonResponses"`
+	CommonGetParams []*Parameter `json:"commonGetParams"`
+	SwaggerTemplate *Swagger     `json:"swagger"`
+	PathTemplate    *PathItem    `json:"pathTemplate"`
+	Port            string       `json:"port"`
+	Host            string       `json:"host"`
+	DbServer        string       `json:"dbserver"`
+	DbPort          string       `json:"dbport"`
+	StaticDirs      []string     `json:"staticDirs"`
 }
 
 // Describes a Swagger-doc resource description
 type Swagger struct {
 	Swagger string `json:"swagger"`
 	Info    struct {
-		Title          string          `json:"title"`
-		Description    string          `json:"description"`
-		TermsOfService string          `json:"termsOfService"`
-		Contact        ContactLicences `json:"contact"`
-		License        ContactLicences `json:"license"`
+		Title          string          `json:"title,omitempty"`
+		Description    string          `json:"description,omitempty"`
+		TermsOfService string          `json:"termsOfService,omitempty"`
+		Contact        ContactLicences `json:"contact,omitempty"`
+		License        ContactLicences `json:"license,omitempty"`
 		Version        string          `json:"version"`
 	} `json:"info"`
-	Host                string                     `json:"host"`
-	BasePath            string                     `json:"basePath"`
-	Schemes             []string                   `json:"schemes"`
-	Consumes            []string                   `json:"consumes"`
-	Produces            []string                   `json:"produces"`
+	Host                string                     `json:"host,omitempty"`
+	BasePath            string                     `json:"basePath,omitempty"`
+	Schemes             []string                   `json:"schemes,omitempty"`
+	Consumes            []string                   `json:"consumes,omitempty"`
+	Produces            []string                   `json:"produces,omitempty"`
 	Paths               map[string]*PathItem       `json:"paths"`
-	Definitions         map[string]*Schema         `json:"definitions"`
-	Parameters          map[string]*Parameter      `json:"parameters"`
-	Responses           map[string]*Responses      `json:"responses"`
-	SecurityDefinitions map[string]*SecurityScheme `json:"securityDefinitions"`
-	Security            []*SecurityRequirement     `json:"security"`
-	Tags                []*Tag                     `json:"tags"`
-	ExternalDocs        struct {
-		Description string `json:"description"`
-		Url         string `json:"url"`
-	} `json:"externalDocs"`
+	Definitions         map[string]*Schema         `json:"definitions,omitempty"`
+	Parameters          map[string]*Parameter      `json:"parameters,omitempty"`
+	Responses           map[string]*Response       `json:"responses,omitempty"`
+	SecurityDefinitions map[string]*SecurityScheme `json:"securityDefinitions,omitempty"`
+	Security            map[string][]string        `json:"security,omitempty"`
+	Tags                []*Tag                     `json:"tags,omitempty"`
+	ExternalDocs        *ExternalDoc               `json:"externalDocs,omitempty"`
 }
 
-// A swagger contact object
+// An external documentation reference
+type ExternalDoc struct {
+	Description string `json:"description,omitempty"`
+	Url         string `json:"url,omitempty"`
+}
+
+type Tag struct {
+	Name         string `json:"name"`
+	Description  string `json:"description,omitempty"`
+	ExternalDocs string `json:"externalDocs,omitempty"`
+}
+
+// A swagger contact or license reference
 type ContactLicences struct {
-	Name  string `json:"string"`
-	URL   string `json:"url"`
+	Name  string `json:"name,omitempty"`
+	URL   string `json:"url,omitempty"`
 	Email string `json:"email,omitempty"`
 }
 
 // Save the resource description to the database backend.
-func (rd *ResourceDescription) Save(db Db_backend) {
-	db.Save(SwaggerResourceDB, ResourceDescriptionName, rd)
+func (sw *Swagger) Save(db Db_backend) {
+	db.Save(SwaggerResourceDB, ResourceDescriptionName, sw)
+}
+
+// Describes an API
+type PathItem struct {
+	Ref        *PathItem    `json:"$ref,omitempty"`
+	Get        *Operation   `json:"get,omitempty"`
+	Put        *Operation   `json:"put,omitempty"`
+	Post       *Operation   `json:"post,omitempty"`
+	Delete     *Operation   `json:"delete,omitempty"`
+	Options    *Operation   `json:"options,omitempty"`
+	Head       *Operation   `json:"head,omitempty"`
+	Patch      *Operation   `json:"patch,omitempty"`
+	Parameters []*Parameter `json:"parameters,omitempty"`
 }
 
 // describes a Swagger-doc resource summary (used in the resource description)
 type ResourceSummary struct {
-	Path        string `json:"path"`
-	Description string `json:"description"`
+	Path        string `json:"path,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 // Describes a property of a Model or a parameter for an Operation
-type Property struct {
-	Type         string      `json:"type,omitempty"`
-	Ref          string      `json:"$ref,omitempty"`
-	Format       string      `json:"format,omitempty"`
-	Enum         []string    `json:"enum,omitempty"`
-	Minimum      float64     `json:"minimum,string,omitempty"`
-	Maximum      float64     `json:"maximum,string,omitempty"`
-	Items        *ItemsRef   `json:"items,omitempty"`
-	UniqueItems  bool        `json:"uniqueItems,omitempty"`
-	DefaultValue interface{} `json:"defaultValue,omitempty"`
+type Schema struct {
+	Ref              string        `json:"$ref,omitempty"`
+	Format           string        `json:"format,omitempty"`
+	Title            string        `json:"title,omitempty"`
+	Description      string        `json:"description,omitempty"`
+	Default          interface{}   `json:"default,omitempty"`
+	MultipleOf       int           `json:"multipleOf,omitempty"`
+	Maximum          float64       `json:"maximum,string,omitempty"`
+	ExclusiveMaximum bool          `json:"exclusiveMaximum,omitempty"`
+	Minimum          float64       `json:"minimum,string,omitempty"`
+	ExclusiveMinimum bool          `json:"exclusiveMinimum,omitempty"`
+	MaxLength        int           `json:"maxLength,omitempty"`
+	MinLength        int           `json:"minLength,omitempty"`
+	Pattern          string        `json:"minLength,omitempty"`
+	MaxItems         int           `json:"maxitems,omitempy"`
+	MinItems         int           `json:"minitems,omitempty"`
+	UniqueItems      bool          `json:"uniqueItems,omitempty"`
+	MaxProperties    int           `json:"maxProperties,omitempty"`
+	MinProperties    int           `json:"minProperties,omitempty"`
+	Required         []string      `json:"required,omitempty"`
+	Enum             []interface{} `json:"enum,omitempty"`
+	Type             string        `json:"type,omitempty"`
+
+	Items           *Schema   `json:"items,omitempty"`
+	AdditionalItems bool      `json:"additionalItems,omitempty"`
+	AllOf           []*Schema `json:"allOf,omitempty"`
+
+	Properties           map[string]*Schema `json:"properties,omitempty"`
+	AdditionalProperties bool               `json:"additionalProperties,omitempty"`
+
+	Discriminator string `json:"discriminator,omitempty"`
+	ReadOnly      bool   `json:"readOnly,omitempty"`
 	// parameters fields -
 	// properties and params share a bunch of fields
-	ParamType     string `json:"paramType,omitempty"`
-	Name          string `json:"name,omitempty"`
-	Description   string `json:"description,omitempty"`
-	Required      bool   `json:"required,omitempty"`
-	AllowMultiple bool   `json:"allowMultiple,omitempty"`
+	XML          *XmlRef      `json:"xml,omitempty"`
+	ExternalDocs *ExternalDoc `json:"externalDocs,omitempty"`
+	Example      interface{}  `json:"example,omitempty"`
 }
 
-// Describes a reference to another model within an array property
-// Can either have the type and (optionally) format fields populated or the ref
-// field populated.
-type ItemsRef struct {
-	Type   string `json:"type,omitempty"`
-	Ref    string `json:"$ref,omitempty"`
-	Format string `json:"format,omitempty"`
-}
-
-// Describes a swagger model
-type Model struct {
-	Id            string               `json:"id"`
-	Description   string               `json:"description"`
-	Required      []string             `json:"required,omitempty"`
-	Properties    map[string]*Property `json:"properties"`
-	SubTypes      []string             `json:"subTypes,omitempty"`
-	Discriminator string               `json:"discriminator,omitempty"`
-}
-
-// Describes a swagger resource
-type Resource struct {
-	SwaggerVersion string                    `json:"swaggerVersion"`
-	ApiVersion     string                    `json:"apiVersion"`
-	BasePath       string                    `json:"basePath"`
-	ResourcePath   string                    `json:"resourcePath"`
-	Apis           []*Api                    `json:"apis"`
-	Models         map[string]*Model         `json:"models"`
-	Produces       []string                  `json:"produces"`
-	Consumes       []string                  `json:"consumes"`
-	Authorizations map[string]*Authorization `json:"authorizations"`
+// A definition of the XML represenation of a schema.
+type XmlRef struct {
+	Name      string `json:"name,omitempty"`
+	Namespace string `json:"namespace,omitempty"`
+	Prefix    string `json:"prefix,omitempty"`
+	Attribute bool   `json:"attribute,omitempty"`
+	Wrapped   bool   `json:"wrapped,omitempty"`
 }
 
 // Save stores a resource in a database backend
-func (r *Resource) Save(db Db_backend) {
+/*func (r *Resource) Save(db Db_backend) {
 	docname := ResourceStem + strings.TrimLeft(r.ResourcePath, "/")
 	db.Save(SwaggerResourceDB, docname, r)
-}
+}*/
 
 // Describes an authorization option for a resource (not implemented yet)
 type Authorization struct{}
 
-// Describes an API
-type Api struct {
-	Path        string       `json:"path"`
-	Description string       `json:"string"`
-	Operations  []*Operation `json:"operations"`
-}
-
 // Describes an operation (e.g. a GET, PUT or POST operation)
 type Operation struct {
-	Method           string                    `json:"method"`
-	Type             string                    `json:"type"`
-	Items            *ItemsRef                 `json:"items,omitempty"`
-	Summary          string                    `json:"summary"`
-	Notes            string                    `json:"notes"`
-	Nickname         string                    `json:"nickname"`
-	Authorizations   map[string]*Authorization `json:"authorizations,omitempty"`
-	Parameters       []*Property               `json:"parameters"`
-	ResponseMessages []*ResponseMessage        `json:"responseMessages"`
-	Produces         []string                  `json:"produces,omitempty"`
-	Consumes         []string                  `json:"consumes,omitempty"`
-	Deprecated       bool                      `json:"deprecated"`
+	Tags         []string            `json:"tags,omitempty"`
+	Summary      string              `json:"summary,omitempty"`
+	Description  string              `json:"description,omitempty"`
+	ExternalDocs *ExternalDoc        `json:"externalDocs,omitempty"`
+	OperationId  string              `json:"operationId,omitempty"`
+	Produces     []string            `json:"produces,omitempty"`
+	Consumes     []string            `json:"consumes,omitempty"`
+	Parameters   []*Parameter        `json:"parameters,omitempty"`
+	Responses    map[int]*Response   `json:"responses"`
+	Schemes      []string            `json:"schemes,omitempty"`
+	Deprecated   bool                `json:"deprecated,omitempty"`
+	Security     map[string][]string `json:"authorizations,omitempty"`
+}
+
+// Describes a parameter
+type Parameter struct {
+	Name             string        `json:"name"`
+	In               string        `json:"in"`
+	Description      string        `json:"description,omitempty"`
+	Required         bool          `json:"required,omitempty"`
+	Schema           *Schema       `json:"schema,omitempty"`
+	Type             string        `json:"type,omitempty"`
+	Format           string        `json:"format,omitempty"`
+	AllowEmptyValue  bool          `json:"allowElmptyValue,omitempty"`
+	Items            *Items        `json:"items,omitempty"`
+	CollectionFormat string        `json:"collectionFormat,omitempty"`
+	Default          interface{}   `json:"default,omitempty"`
+	Maximum          float64       `json:"maximum,string,omitempty"`
+	ExclusiveMaximum bool          `json:"exclusiveMaximum,omitempty"`
+	Minimum          float64       `json:"minimum,string,omitempty"`
+	ExclusiveMinimum bool          `json:"exclusiveMinimum,omitempty"`
+	MaxLength        int           `json:"maxLength,omitempty"`
+	MinLength        int           `json:"minLength,omitempty"`
+	Pattern          string        `json:"minLength,omitempty"`
+	MaxItems         int           `json:"maxitems,omitempy"`
+	MinItems         int           `json:"minitems,omitempty"`
+	UniqueItems      bool          `json:"uniqueItems,omitempty"`
+	MaxProperties    int           `json:"maxProperties,omitempty"`
+	MinProperties    int           `json:"minProperties,omitempty"`
+	Enum             []interface{} `json:"enum,omitempty"`
+	MultipleOf       int           `json:"multipleOf,omitempty"`
+}
+
+// Describes an array item in a parameter
+type Items struct {
+	Type             string        `json:"type"`
+	Format           string        `json:"format,omitempty"`
+	Items            *Items        `json:"items,omitempty"`
+	CollectionFormat string        `json:"collectionFormat,omitempty"`
+	Default          interface{}   `json:"default,omitempty"`
+	Maximum          float64       `json:"maximum,string,omitempty"`
+	ExclusiveMaximum bool          `json:"exclusiveMaximum,omitempty"`
+	Minimum          float64       `json:"minimum,string,omitempty"`
+	ExclusiveMinimum bool          `json:"exclusiveMinimum,omitempty"`
+	MaxLength        int           `json:"maxLength,omitempty"`
+	MinLength        int           `json:"minLength,omitempty"`
+	Pattern          string        `json:"minLength,omitempty"`
+	MaxItems         int           `json:"maxitems,omitempy"`
+	MinItems         int           `json:"minitems,omitempty"`
+	UniqueItems      bool          `json:"uniqueItems,omitempty"`
+	MaxProperties    int           `json:"maxProperties,omitempty"`
+	MinProperties    int           `json:"minProperties,omitempty"`
+	Required         bool          `json:"required,omitempty"`
+	Enum             []interface{} `json:"enum,omitempty"`
+	MultipleOf       int           `json:"multipleOf,omitempty"`
 }
 
 // Describes a response message from an API
-type ResponseMessage struct {
-	Code          int    `json:"code"`
-	Message       string `json:"message"`
-	ResponseModel string `json:"responseModel,omitempty"`
+type Response struct {
+	Description string  `json:"description"`
+	Schema      *Schema `json:"schema,omitempty"`
+	// headers and items are functionally equivalent
+	Headers  map[string]*Items      `json:"headers,omitempty"`
+	Examples map[string]interface{} `json:"example,omitempty"`
+}
+
+type SecurityScheme struct {
+	Type             string            `json:"type"`
+	Description      string            `json:"description,omitempty"`
+	Name             string            `json:"name"`
+	In               string            `json:"in"`
+	Flow             string            `json:"flow"`
+	AuthorizationUrl string            `json:"authorizationUrl"`
+	TokenUrl         string            `json:"tokenUrl"`
+	Scopes           map[string]string `json:"scopes"`
 }
