@@ -1,15 +1,18 @@
 package dragonfruit
 
 import (
+	"fmt"
 	"github.com/gedex/inflector"
 	"strings"
 )
 
 // getCommonResponseCodes loads a set of response codes that most of the APIs
 // return.
-func getCommonResponseCodes(cnf Conf) []*Response {
-
-	return cnf.CommonResponses
+func getCommonResponseCodes(cnf Conf, typ string) map[string]*Response {
+	if typ == "collection" {
+		return cnf.CommonCollectionResponses
+	}
+	return cnf.CommonSingleResponses
 }
 
 // getCommonGetParams loads a set of common params that should be added to
@@ -25,30 +28,15 @@ func LoadDescriptionFromDb(db Db_backend,
 
 	rd := new(Swagger)
 	err := db.Load(SwaggerResourceDB, ResourceDescriptionName, rd)
+	fmt.Println("~", err)
 
 	if err != nil {
 		//TODO - fix this stupid shadowing issue
 		rd = cnf.SwaggerTemplate
+		fmt.Println(rd)
 		return rd, nil
 	}
 	return rd, err
-}
-
-// LoadPathFromDb loads a resource from a database backend
-// (see the backend stuff and types).
-func LoadPathFromDb(db Db_backend,
-	pathName string, cnf Conf) (*PathItem, error) {
-
-	res := &PathItem{}
-	err := db.Load(SwaggerResourceDB, ResourceStem+pathName, &res)
-
-	// doc wasn't found
-	if err != nil {
-		res = cnf.PathTemplate
-		return res, nil
-	}
-
-	return res, err
 }
 
 // MakeCommonAPIs creates a set of operations and APIs for a model.
@@ -67,13 +55,14 @@ func MakeCommonAPIs(
 
 	schema := schemaMap[schemaName]
 	out := make(map[string]*PathItem)
-	modelDescription := inflector.Pluralize(inflector.Singularize(schemaName))
+	//modelDescription := inflector.Pluralize(inflector.Singularize(schemaName))
 
 	// make the collection api - get lists of models and create new models
 	collectionPath := prefix + "/" + pathRoot
 	collectionApi := &PathItem{}
 	collectionApi.Get = makeCollectionOperation(schemaName, schema, upstreamParams, cnf)
 	collectionApi.Post = makePostOperation(schemaName, schema, upstreamParams, cnf)
+	collectionApi.Options = makeCollectionOptionsOperation()
 
 	out[collectionPath] = collectionApi
 
@@ -84,10 +73,12 @@ func MakeCommonAPIs(
 	// TODO - parallelize this...
 	individualPath := prefix + "/" + pathRoot + "/{" + idName + "}"
 	individualApi := &PathItem{}
-	individualApi.Get = makeSingleGetOperation(schemaName, schema, upstreamParams, cnf)
+	individualApi.Delete = makeDeleteOperation(schemaName, upstreamParams, cnf)
+
+	individualApi.Get = makeSingleGetOperation(schemaName, upstreamParams, cnf)
 	individualApi.Put = makePutOperation(schemaName, schema, upstreamParams, cnf)
-	individualApi.Patch = makePatchOperation(schemaName, schema, upstreamParams, cnf)
-	individualApi.Delete = makeDeleteOperation(schemaName, schema, upstreamParams, cnf)
+	individualApi.Patch = makePatchOperation(schemaName, upstreamParams, cnf)
+	individualApi.Options = makeSingleOptionsOperation()
 
 	out[individualPath] = individualApi
 
@@ -109,9 +100,9 @@ func makeSubApis(
 ) map[string]*PathItem {
 
 	out := make(map[string]*PathItem)
-	for propName, propSchema := range schema.Properties {
+	for _, propSchema := range schema.Properties {
 		if (propSchema.Type == "array") && (propSchema.Items.Ref != "") {
-			subModelName := propSchema.Items.Ref
+			subModelName := DeRef(propSchema.Items.Ref)
 			st := inflector.Pluralize(inflector.Singularize(subModelName))
 			resourceroot := strings.ToLower(st)
 			commonApis := MakeCommonAPIs(prefix, resourceroot, subModelName,
@@ -180,16 +171,17 @@ func makePathId(schema *Schema) (propName string, idparam *Parameter) {
 
 // makeDeleteOperation creates operations to delete single instances of a model.
 func makeDeleteOperation(schemaName string,
-	schema *Schema, upstreamParams []*Parameter, cnf Conf) (deleteOp *Operation) {
+	upstreamParams []*Parameter, cnf Conf) (deleteOp *Operation) {
 
 	deleteOp = &Operation{
 		OperationId: "delete" + schemaName,
 		Summary:     "Delete a " + schemaName + " object.",
+		Responses:   copyResponseMap(cnf.CommonSingleResponses),
 	}
 
-	responseSchema := buildSimpleResponseSchema(200, "Successfully deleted")
+	responseSchema := buildSimpleResponseSchema("200", "Successfully deleted")
 
-	deleteOp.Responses[200] = &Response{
+	deleteOp.Responses["200"] = &Response{
 		Description: "Successful deletion",
 		Schema:      responseSchema,
 	}
@@ -201,18 +193,19 @@ func makeDeleteOperation(schemaName string,
 
 // makeSingleGetOperation makes operations to load single instances of models.
 // Basically for URLs ending /{model id}.
-func makeSingleGetOperation(schemaName string, schema *Schema,
-	upstreamParams []*Parameter, cnf Conf) (getOp *Operation) {
+func makeSingleGetOperation(schemaName string, upstreamParams []*Parameter,
+	cnf Conf) (getOp *Operation) {
 
 	getOp = &Operation{
 		OperationId: "getSingle" + schemaName,
 		Summary:     "Get a single " + schemaName + " object.",
+		Responses:   copyResponseMap(cnf.CommonSingleResponses),
 	}
 
-	ref := makeRef(schemaName + strings.Title(ContainerName))
+	ref := MakeRef(schemaName + strings.Title(ContainerName))
 
 	// Add a 200 response for successful operations
-	getOp.Responses[200] = &Response{
+	getOp.Responses["200"] = &Response{
 		Schema: &Schema{
 			Ref: ref,
 		},
@@ -224,23 +217,24 @@ func makeSingleGetOperation(schemaName string, schema *Schema,
 }
 
 // makePatchOperation creates operations to partially update models.
-func makePatchOperation(schemaName string, schema *Schema,
+func makePatchOperation(schemaName string,
 	upstreamParams []*Parameter, cnf Conf) (patchOp *Operation) {
 	// Create the put operation
 
 	patchOp = &Operation{
 		OperationId: "updatePartial" + schemaName,
 		Summary:     "Partially update a  " + schemaName + " object.",
+		Responses:   copyResponseMap(cnf.CommonSingleResponses),
 	}
 
-	ref := makeRef(schemaName + strings.Title(ContainerName))
+	ref := MakeRef(schemaName + strings.Title(ContainerName))
 
 	ioSchema := &Schema{
 		Ref: ref,
 	}
 
 	// Add a 200 response for successful operations
-	patchOp.Responses[200] = &Response{
+	patchOp.Responses["200"] = &Response{
 		Schema:      ioSchema,
 		Description: "Successfully updated " + schemaName,
 	}
@@ -267,16 +261,17 @@ func makePutOperation(schemaName string, schema *Schema,
 	putOp = &Operation{
 		OperationId: "update" + schemaName,
 		Summary:     "Update a " + schemaName + " object.",
+		Responses:   copyResponseMap(cnf.CommonSingleResponses),
 	}
 
-	ref := makeRef(schemaName + strings.Title(ContainerName))
+	ref := MakeRef(schemaName + strings.Title(ContainerName))
 
 	ioSchema := &Schema{
 		Ref: ref,
 	}
 
 	// Add a 200 response for successful operations
-	putOp.Responses[200] = &Response{
+	putOp.Responses["200"] = &Response{
 		Schema:      ioSchema,
 		Description: "Successfully updated " + schemaName,
 	}
@@ -302,8 +297,9 @@ func makePostOperation(schemaName string, schema *Schema,
 	postOp = &Operation{
 		OperationId: "new" + schemaName,
 		Summary:     "Create a new " + schemaName + " object.",
+		Responses:   make(map[string]*Response),
 	}
-	ref := makeRef(schemaName + strings.Title(ContainerName))
+	ref := MakeRef(schemaName + strings.Title(ContainerName))
 
 	ioSchema := &Schema{
 		Ref: ref,
@@ -313,7 +309,7 @@ func makePostOperation(schemaName string, schema *Schema,
 
 		Schema: ioSchema,
 	}
-	postOp.Responses[201] = postResp
+	postOp.Responses["201"] = postResp
 	// Post body to create the new model.
 	bodyParam := &Parameter{
 		Name:        "body",
@@ -331,22 +327,28 @@ func makePostOperation(schemaName string, schema *Schema,
 // makeCollectionOperations defines GET calls for collections of the model.
 // Basically, GET operations on URLs ending with /
 func makeCollectionOperation(schemaName string, schema *Schema,
-	upstreamParams []*Parameter, cnf Conf) (getOp *Operation) {
+	upstreamParams []*Parameter,
+	cnf Conf) (getOp *Operation) {
+
 	getOp = &Operation{
 		OperationId: "get" + schemaName + "Collection",
-		Summary:     "Get multiple " + schemaName + " objects.",
+		Summary:     "Get multiple " + inflector.Pluralize(inflector.Singularize(schemaName)) + ".",
+		Responses:   copyResponseMap(cnf.CommonCollectionResponses),
 	}
 
-	ref := makeRef(schemaName + strings.Title(ContainerName))
+	ref := MakeRef(schemaName + strings.Title(ContainerName))
 
 	ioSchema := &Schema{
 		Ref: ref,
 	}
 
-	getOp.Responses[200] = &Response{
+	getOp.Responses["200"] = &Response{
 		Schema:      ioSchema,
 		Description: "A collection of " + schemaName,
 	}
+
+	fmt.Println(schemaName)
+	fmt.Println("schema properties", schema.Properties)
 
 	// add the parameters
 	getOp.Parameters = getCommonGetParams(cnf)
@@ -383,6 +385,49 @@ func makeCollectionOperation(schemaName string, schema *Schema,
 	}
 	getOp.Parameters = append(getOp.Parameters, upstreamParams...)
 
+	return
+}
+
+// makeCollectionOptionsOperation returns the options on
+// a collection url
+func makeCollectionOptionsOperation() (optOp *Operation) {
+	headers := make(map[string]*Items)
+	optOp = &Operation{}
+	optOp.Responses = make(map[string]*Response)
+
+	var header = &Items{
+		Type:    "string",
+		Default: "GET, POST",
+	}
+
+	headers["Allow"] = header
+
+	optOp.Responses["200"] = &Response{
+		Headers:     headers,
+		Description: "This url allows GET and POST operations.",
+	}
+	return
+}
+
+// makeCollectionOptionsOperation returns the options on
+// a single url
+func makeSingleOptionsOperation() (optOp *Operation) {
+	headers := make(map[string]*Items)
+
+	optOp = &Operation{}
+	optOp.Responses = make(map[string]*Response)
+
+	var header = &Items{
+		Type:    "string",
+		Default: "GET, PUT, DELETE, PATCH",
+	}
+
+	headers["Allow"] = header
+
+	optOp.Responses["200"] = &Response{
+		Description: "This url allows GET, PUT, PATCH and DELETE operations.",
+		Headers:     headers,
+	}
 	return
 }
 
@@ -456,7 +501,7 @@ func makeStringParams(propName string, schema *Schema) (p []*Parameter) {
 		Type:   schema.Type,
 		Enum:   schema.Enum,
 		In:     "query",
-		Name:   schemaName,
+		Name:   propName,
 		Format: schema.Format,
 	}
 	p = append(p, pr)
@@ -464,11 +509,11 @@ func makeStringParams(propName string, schema *Schema) (p []*Parameter) {
 		rangeField := &Parameter{
 			Type:   "array",
 			In:     "query",
-			Name:   schemaName,
+			Name:   propName,
 			Format: schema.Format,
 		}
 		rangeField.Name = propName + "Range"
-		rangeField.AllowMultiple = true
+		rangeField.CollectionFormat = "csv"
 
 		p = append(p, rangeField)
 	}
@@ -477,7 +522,10 @@ func makeStringParams(propName string, schema *Schema) (p []*Parameter) {
 }
 
 // Convenience function for building simple code/message responses
-func buildSimpleResponseSchema(code int, message string) (out *Schema) {
+func buildSimpleResponseSchema(code string, message string) (out *Schema) {
+	out = &Schema{}
+	out.Properties = make(map[string]*Schema)
+
 	out.Properties["code"] = &Schema{
 		Type: "integer",
 	}
@@ -486,11 +534,20 @@ func buildSimpleResponseSchema(code int, message string) (out *Schema) {
 	}
 	out.Required = []string{"type", "message"}
 	out.Example = struct {
-		Code    int    `json:"code"`
+		Code    string `json:"code"`
 		Message string `json:"message"`
 	}{
 		code,
 		message,
 	}
 	return
+}
+
+// Convenience function for copying a response map because Golang Reasons...
+func copyResponseMap(in map[string]*Response) map[string]*Response {
+	out := make(map[string]*Response)
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
 }

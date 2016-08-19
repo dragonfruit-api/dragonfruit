@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
-	"strings"
 )
 
 var (
@@ -47,7 +46,7 @@ func GetMartiniInstance(cnf Conf) *martini.ClassicMartini {
 }
 
 // ServeDocSet sets up the paths which serve the api documentation
-func ServeDocSet(db Db_backend, cnf Conf) {
+func ServeDocSet(m *martini.ClassicMartini, db Db_backend, cnf Conf) {
 	m.Map(db)
 	rd, err := LoadDescriptionFromDb(db, cnf)
 	if err != nil {
@@ -66,64 +65,57 @@ func ServeDocSet(db Db_backend, cnf Conf) {
 		return 200, string(docs)
 	})
 	// create a path for each API described in the doc set
-	for _, res := range rd.APIs {
-		newDocFromSummary(res, db, cnf)
+	for path, pathitem := range rd.Paths {
+
+		NewApiFromSpec(path, pathitem, rd, m)
 	}
 
-}
-
-// newDocFromSummary adds a new api documentation endpoint to the documentation
-// path set up in the function above.
-func newDocFromSummary(r *ResourceSummary, db Db_backend, cnf Conf) {
-	// load either a populated resource or an empty one.
-	resp, err := LoadResourceFromDb(db, strings.TrimLeft(r.Path, "/"), cnf)
-
-	if err != nil {
-		panic(err)
-	}
-
-	m.Get("/api-docs"+r.Path, func(res http.ResponseWriter) (int, string) {
-		h := res.Header()
-
-		h.Add("Content-Type", "application/json;charset=utf-8")
-		doc, err := json.Marshal(resp)
-		if err != nil {
-			return 400, err.Error()
-		}
-		return 200, string(doc)
-	})
-	NewApiFromSpec(resp)
 }
 
 // NewApiFromSpec creates a new API from stored swagger-doc specifications.
-func NewApiFromSpec(resource *Resource) {
+func NewApiFromSpec(path string, pathitem *PathItem, rd *Swagger, m *martini.ClassicMartini) {
 
-	for _, api := range resource.Apis {
-		for _, op := range api.Operations {
-			addOperation(api, op, m, resource.BasePath, resource.Models)
+	var pathArr = map[string]*Operation{
+		"DELETE":  pathitem.Delete,
+		"GET":     pathitem.Get,
+		"HEAD":    pathitem.Head,
+		"OPTIONS": pathitem.Options,
+		"PUT":     pathitem.Put,
+		"POST":    pathitem.Post,
+	}
+
+	for method, operation := range pathArr {
+		if operation != nil {
+			addOperation(path, pathitem, method, rd, operation, m)
 		}
 	}
 
 }
 
 // addOperation adds a single operation from an API specification.  This
-// creates a GET/POST/PUT/PATCH/DELETE listener and maps inbound requests to
+// creates a GET/POST/PUT/PATCH/DELETE/OPTIONS listener and maps inbound requests to
 // backend functions.
 // TODO - return specified error codes instead of 500
-func addOperation(api *Api,
+func addOperation(path string,
+	pathitem *PathItem,
+	method string,
+	rd *Swagger,
 	op *Operation,
 	m *martini.ClassicMartini,
-	basePath string,
-	models map[string]*Model) {
+) {
 
-	path := translatePath(api.Path, basePath)
+	path = translatePath(path)
+	produces := append(rd.Produces, op.Produces...)
 
-	switch op.Method {
+	consumes := append(rd.Consumes, op.Consumes...)
+
+	switch method {
 	case "GET":
 		m.Get(path, func(params martini.Params, req *http.Request, db Db_backend, res http.ResponseWriter) (int, string) {
 			h := res.Header()
+			addHeaders(h, "Content-Type", produces)
+			addHeaders(h, "Accept", consumes)
 
-			h.Add("Content-Type", "application/json;charset=utf-8")
 			req.ParseForm()
 
 			// coerce any required path parameters
@@ -134,7 +126,7 @@ func addOperation(api *Api,
 			}
 
 			q := QueryParams{
-				Path:        api.Path,
+				Path:        path,
 				PathParams:  outParams,
 				QueryParams: req.Form,
 			}
@@ -156,7 +148,8 @@ func addOperation(api *Api,
 		m.Post(path, func(params martini.Params, req *http.Request, db Db_backend, res http.ResponseWriter) (int, string) {
 			h := res.Header()
 
-			h.Add("Content-Type", "application/json;charset=utf-8")
+			addHeaders(h, "Content-Type", produces)
+			addHeaders(h, "Accept", consumes)
 			val, err := ioutil.ReadAll(req.Body)
 
 			// coerce any required path parameters
@@ -167,7 +160,7 @@ func addOperation(api *Api,
 			}
 
 			q := QueryParams{
-				Path:       api.Path,
+				Path:       path,
 				PathParams: outParams,
 				Body:       val,
 			}
@@ -184,7 +177,9 @@ func addOperation(api *Api,
 		m.Put(path, func(params martini.Params, req *http.Request, db Db_backend, res http.ResponseWriter) (int, string) {
 			h := res.Header()
 
-			h.Add("Content-Type", "application/json;charset=utf-8")
+			addHeaders(h, "Content-Type", produces)
+			addHeaders(h, "Accept", consumes)
+
 			val, err := ioutil.ReadAll(req.Body)
 			outParams, err := coercePathParam(params, op.Parameters)
 			if err != nil {
@@ -192,7 +187,7 @@ func addOperation(api *Api,
 				return 409, string(outerr)
 			}
 			q := QueryParams{
-				Path:       api.Path,
+				Path:       path,
 				PathParams: outParams,
 				Body:       val,
 			}
@@ -209,7 +204,8 @@ func addOperation(api *Api,
 		m.Patch(path, func(params martini.Params, req *http.Request, db Db_backend, res http.ResponseWriter) (int, string) {
 			h := res.Header()
 
-			h.Add("Content-Type", "application/json;charset=utf-8")
+			addHeaders(h, "Content-Type", produces)
+			addHeaders(h, "Accept", consumes)
 			val, err := ioutil.ReadAll(req.Body)
 			outParams, err := coercePathParam(params, op.Parameters)
 			if err != nil {
@@ -217,7 +213,7 @@ func addOperation(api *Api,
 				return 409, string(outerr)
 			}
 			q := QueryParams{
-				Path:       api.Path,
+				Path:       path,
 				PathParams: outParams,
 				Body:       val,
 			}
@@ -234,14 +230,15 @@ func addOperation(api *Api,
 		m.Delete(path, func(params martini.Params, db Db_backend, res http.ResponseWriter) (int, string) {
 			h := res.Header()
 
-			h.Add("Content-Type", "application/json;charset=utf-8")
+			addHeaders(h, "Content-Type", produces)
+			addHeaders(h, "Accept", consumes)
 			outParams, err := coercePathParam(params, op.Parameters)
 			if err != nil {
 				outerr, _ := json.Marshal(err.Error())
 				return 409, string(outerr)
 			}
 			q := QueryParams{
-				Path:       api.Path,
+				Path:       path,
 				PathParams: outParams,
 			}
 			err = db.Remove(q)
@@ -252,11 +249,26 @@ func addOperation(api *Api,
 			return 200, ""
 		})
 		break
+
+	case "OPTIONS":
+		m.Options(path, func(db Db_backend, res http.ResponseWriter) (int, string) {
+			h := res.Header()
+
+			addHeaders(h, "Content-Type", produces)
+			addHeaders(h, "Accept", consumes)
+
+			for t, val := range op.Responses["200"].Headers {
+
+				h.Add(t, val.Default.(string))
+			}
+			return 200, ""
+		})
+		break
 	}
 }
 
 // ugh pretending that dynamic typing is a thing
-func coercePathParam(sentParams martini.Params, apiPathParams []*Property) (outParams map[string]interface{}, err error) {
+func coercePathParam(sentParams martini.Params, apiPathParams []*Parameter) (outParams map[string]interface{}, err error) {
 	outParams = make(map[string]interface{})
 	// and here is where we wish Golang had functional-style
 	// list manipulation stuff
@@ -287,9 +299,15 @@ func coercePathParam(sentParams martini.Params, apiPathParams []*Property) (outP
 
 }
 
+func addHeaders(h http.Header, headerType string, headArray []string) {
+	for _, head := range headArray {
+		h.Add(headerType, head)
+	}
+}
+
 // translatePath transforms a path from swagger-doc format (/path/{id}) to
 // Martini format (/path/:id).
-func translatePath(path string, basepath string) (outpath string) {
-	outpath = basepath + PathRe.ReplaceAllString(path, "/$2/:$4")
+func translatePath(path string) (outpath string) {
+	outpath = PathRe.ReplaceAllString(path, "/$2/:$4")
 	return
 }

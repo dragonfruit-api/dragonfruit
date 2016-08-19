@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/pborman/uuid"
 	//"fmt"
+	"fmt"
 	"github.com/fjl/go-couchdb"
 	"github.com/ideo/dragonfruit"
 	"reflect"
@@ -17,9 +18,9 @@ import (
 // determines that it's looking for "stuff" with a value of "3" inside a
 // document.
 func findPropertyFromPath(model string, path string,
-	resource *dragonfruit.Resource) (string, *dragonfruit.Property) {
+	resource *dragonfruit.Swagger) (string, *dragonfruit.Schema) {
 
-	m, ok := resource.Models[model]
+	m, ok := resource.Definitions[model]
 	if ok {
 		for k, v := range m.Properties {
 			if strings.ToLower(k) == strings.ToLower(path) {
@@ -436,6 +437,8 @@ func (d *Db_backend_couch) queryView(params dragonfruit.QueryParams) (int,
 
 	viewName, viewExists := d.pickView(params, opts, limit, offset)
 
+	fmt.Println("view name", viewName, viewExists)
+
 	// if we found a view, query it
 	if viewExists {
 		err = db.View("_design/core", viewName, &result, opts)
@@ -553,6 +556,7 @@ func (d *Db_backend_couch) pickView(params dragonfruit.QueryParams,
 	offset int64) (string, bool) {
 
 	viewName := makePathViewName(params.Path)
+	fmt.Println("internal view name", viewName, params.Path)
 
 	// if there's no query parameters to filter, you can go
 	// ahead and use the passed limit and offset

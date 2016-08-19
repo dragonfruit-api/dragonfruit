@@ -1,6 +1,7 @@
 package backend_couchdb
 
 import (
+	"fmt"
 	"github.com/gedex/inflector"
 	"github.com/ideo/dragonfruit"
 	"strings"
@@ -19,7 +20,7 @@ import (
 //
 // the Query method defines access rules and priorities
 func (d *Db_backend_couch) Prep(database string,
-	resource *dragonfruit.Resource) error {
+	resource *dragonfruit.Swagger) error {
 
 	vd := viewDoc{}
 	id := "_design/core"
@@ -35,14 +36,11 @@ func (d *Db_backend_couch) Prep(database string,
 	vd.Language = "javascript"
 
 	// well this is ugly...
-	for _, api := range resource.Apis {
-		for _, operation := range api.Operations {
-			if operation.Method == "GET" {
-				vd.makePathParamView(api, operation, resource)
-				vd.makeQueryParamView(api, operation, resource)
-			}
+	for path, api := range resource.Paths {
 
-		}
+		vd.makePathParamView(api, path, api.Get, resource)
+		vd.makeQueryParamView(api, api.Get, resource)
+
 	}
 	d.Save(database, id, vd)
 	return nil
@@ -56,14 +54,20 @@ func (vd *viewDoc) add(viewname string, v view) {
 // makeQueryParamView creates views for filter queries (i.e. queries passed
 // through GET params)
 // TODO - range queries
-func (vd *viewDoc) makeQueryParamView(api *dragonfruit.Api,
+func (vd *viewDoc) makeQueryParamView(
+	api *dragonfruit.PathItem,
 	op *dragonfruit.Operation,
-	resource *dragonfruit.Resource) {
+	resource *dragonfruit.Swagger) {
 
-	responseModel := strings.Replace(op.Type, strings.Title(dragonfruit.ContainerName), "", -1)
-	model := resource.Models[responseModel]
+	modelName := dragonfruit.DeRef(op.Responses["200"].Schema.Ref)
+	fmt.Printf("%+v\n", resource.Definitions)
+	responseModel := strings.Replace(modelName, strings.Title(dragonfruit.ContainerName), "", -1)
+	fmt.Println(responseModel)
+
+	model := resource.Definitions[responseModel]
 	for _, param := range op.Parameters {
-		if param.ParamType == "query" {
+		if param.In == "query" {
+			fmt.Println(model)
 			for propname, prop := range model.Properties {
 				if param.Name == propname {
 					if prop.Type != "array" {
@@ -79,12 +83,14 @@ func (vd *viewDoc) makeQueryParamView(api *dragonfruit.Api,
 }
 
 // makePathParamView creates views for values passed through path parameters
-func (vd *viewDoc) makePathParamView(api *dragonfruit.Api,
+func (vd *viewDoc) makePathParamView(api *dragonfruit.PathItem,
+	path string,
 	op *dragonfruit.Operation,
-	resource *dragonfruit.Resource) {
+	resource *dragonfruit.Swagger) {
 
-	matches := dragonfruit.PathRe.FindAllStringSubmatch(api.Path, -1)
-	viewname := makePathViewName(api.Path)
+	matches := dragonfruit.PathRe.FindAllStringSubmatch(path, -1)
+	viewname := makePathViewName(path)
+	fmt.Println("prepping path view name: ", path, viewname)
 
 	if len(matches) == 1 {
 		// regex voodoo

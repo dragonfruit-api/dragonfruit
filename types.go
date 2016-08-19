@@ -14,16 +14,16 @@ const (
 
 // A configuration set for the service
 type Conf struct {
-	ContainerModels []*Schema    `json:"containerModels"`
-	CommonResponses []*Response  `json:"commonResponses"`
-	CommonGetParams []*Parameter `json:"commonGetParams"`
-	SwaggerTemplate *Swagger     `json:"swagger"`
-	PathTemplate    *PathItem    `json:"pathTemplate"`
-	Port            string       `json:"port"`
-	Host            string       `json:"host"`
-	DbServer        string       `json:"dbserver"`
-	DbPort          string       `json:"dbport"`
-	StaticDirs      []string     `json:"staticDirs"`
+	ContainerModels           []*Schema            `json:"containerModels"`
+	CommonSingleResponses     map[string]*Response `json:"commonSingleResponses"`
+	CommonCollectionResponses map[string]*Response `json:"commonCollectionResponses"`
+	CommonGetParams           []*Parameter         `json:"commonGetParams"`
+	SwaggerTemplate           *Swagger             `json:"swaggerTemplate"`
+	Port                      string               `json:"port"`
+	Host                      string               `json:"host"`
+	DbServer                  string               `json:"dbserver"`
+	DbPort                    string               `json:"dbport"`
+	StaticDirs                []string             `json:"staticDirs"`
 }
 
 // Describes a Swagger-doc resource description
@@ -89,12 +89,6 @@ type PathItem struct {
 	Parameters []*Parameter `json:"parameters,omitempty"`
 }
 
-// describes a Swagger-doc resource summary (used in the resource description)
-type ResourceSummary struct {
-	Path        string `json:"path,omitempty"`
-	Description string `json:"description,omitempty"`
-}
-
 // Describes a property of a Model or a parameter for an Operation
 type Schema struct {
 	Ref              string        `json:"$ref,omitempty"`
@@ -155,18 +149,18 @@ type Authorization struct{}
 
 // Describes an operation (e.g. a GET, PUT or POST operation)
 type Operation struct {
-	Tags         []string            `json:"tags,omitempty"`
-	Summary      string              `json:"summary,omitempty"`
-	Description  string              `json:"description,omitempty"`
-	ExternalDocs *ExternalDoc        `json:"externalDocs,omitempty"`
-	OperationId  string              `json:"operationId,omitempty"`
-	Produces     []string            `json:"produces,omitempty"`
-	Consumes     []string            `json:"consumes,omitempty"`
-	Parameters   []*Parameter        `json:"parameters,omitempty"`
-	Responses    map[int]*Response   `json:"responses"`
-	Schemes      []string            `json:"schemes,omitempty"`
-	Deprecated   bool                `json:"deprecated,omitempty"`
-	Security     map[string][]string `json:"authorizations,omitempty"`
+	Tags         []string             `json:"tags,omitempty"`
+	Summary      string               `json:"summary,omitempty"`
+	Description  string               `json:"description,omitempty"`
+	ExternalDocs *ExternalDoc         `json:"externalDocs,omitempty"`
+	OperationId  string               `json:"operationId,omitempty"`
+	Produces     []string             `json:"produces,omitempty"`
+	Consumes     []string             `json:"consumes,omitempty"`
+	Parameters   []*Parameter         `json:"parameters,omitempty"`
+	Responses    map[string]*Response `json:"responses"`
+	Schemes      []string             `json:"schemes,omitempty"`
+	Deprecated   bool                 `json:"deprecated,omitempty"`
+	Security     map[string][]string  `json:"authorizations,omitempty"`
 }
 
 // Describes a parameter

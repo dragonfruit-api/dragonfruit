@@ -11,6 +11,10 @@ import (
 	"time"
 )
 
+const (
+	REFPREFIX = "#/definitions/"
+)
+
 // Decompose is the only exported function in this file.  It takes a set of
 // sample data, introspects it and converts it into a map of Swagger models.
 // It returns the model map and/or any errors.
@@ -56,7 +60,7 @@ func appendSubtype(baseSubtype string, d map[string]*Schema) string {
 	d[subtype].Properties["results"] = &Schema{
 		Type: "array",
 		Items: &Schema{
-			Ref: strings.Title(baseSubtype),
+			Ref: MakeRef(strings.Title(baseSubtype)),
 		},
 	}
 	d[subtype].Properties["containerType"] = &Schema{
@@ -83,6 +87,7 @@ func buildSchema(baseType string,
 	v reflect.Value) (err error) {
 
 	baseType = strings.Title(baseType)
+
 	_, ok := m[baseType]
 	if !ok {
 		m[baseType] = &Schema{
@@ -115,7 +120,7 @@ func buildProperty(propName string,
 	switch datatype {
 	case "model":
 		prop := &Schema{
-			Ref: strings.Title(propName),
+			Ref: MakeRef(strings.Title(propName)),
 		}
 		buildSchema(propName, models, sanitized)
 		models[modelName].Properties[propName] = prop
@@ -156,7 +161,10 @@ func buildProperty(propName string,
 // It checks for enumerated values and adds optional format data if appropriate.
 // It returns a pointer to a new property.
 func processString(v reflect.Value) *Schema {
-	prop := &Schema{Type: "string"}
+	prop := &Schema{
+		Type:    "string",
+		Example: v.String(),
+	}
 
 	tst := v.String()
 
@@ -203,12 +211,14 @@ func (prop *Schema) processSplit(str string) {
 			prop.Type = "string"
 			prop.Enum = stringSliceToInterface(split)
 			prop.Format, _ = introspectFormat(split[0])
+			prop.Example = split[0]
 		}
 
 	} else {
 		prop.Enum = stringSliceToInterface(split)
 		prop.Type = "string"
 		prop.Format, _ = introspectFormat(split[0])
+		prop.Example = split[0]
 	}
 
 }
@@ -220,8 +230,10 @@ func processNumber(v reflect.Value) *Schema {
 	prop := &Schema{}
 	if math.Trunc(v.Float()) == v.Float() {
 		prop.Type = "integer"
+		prop.Example = v.Float()
 	} else {
 		prop.Type = "number"
+		prop.Example = v.Int()
 	}
 	return prop
 }
@@ -243,7 +255,7 @@ func (prop *Schema) buildSliceProperty(name string, i *Schema,
 			buildSchema(name, m, sanitized)
 			appendSubtype(name, m)
 			prop.Items = &Schema{}
-			prop.Items.Ref = makeRef(strings.Title(name))
+			prop.Items.Ref = MakeRef(strings.Title(name))
 			break
 		default:
 			prop.Type = "array"
@@ -353,8 +365,12 @@ func translateKind(v reflect.Value) (datatype string, sanitized reflect.Value) {
 	return
 }
 
-func makeRef(defName string) string {
-	return "#/definitions/" + defName
+func MakeRef(defName string) string {
+	return REFPREFIX + defName
+}
+
+func DeRef(defName string) string {
+	return strings.TrimPrefix(defName, REFPREFIX)
 }
 
 func stringSliceToInterface(in []string) (out []interface{}) {
