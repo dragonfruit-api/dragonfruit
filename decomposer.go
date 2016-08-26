@@ -182,58 +182,72 @@ func processString(v reflect.Value) *Schema {
 func (prop *Schema) processSplit(str string) {
 	split := strings.Split(str, "|")
 
+	// if the string parses as an int or a float
+	// ... set the min and max and the type to number
+	// this is kind of ugly...
+	intVal, interr1 := strconv.ParseInt(split[0], 10, 0)
+	_, interr2 := strconv.ParseInt(split[1], 10, 0)
+	fltval1, flterr1 := strconv.ParseFloat(split[0], 32)
+	fltval2, flterr2 := strconv.ParseFloat(split[1], 32)
+
 	// test for max and min values
 	// if there are only two elements in the split array,
 	//
 	if len(split) == 2 {
-		// if the string parses as an int or a float
-		// ... set the min and max and the type to number
-		// this is kind of ugly...
-		_, interr1 := strconv.ParseInt(split[0], 10, 0)
-		_, interr2 := strconv.ParseInt(split[1], 10, 0)
-		fltval1, flterr1 := strconv.ParseFloat(split[0], 64)
-		fltval2, flterr2 := strconv.ParseFloat(split[1], 64)
 
 		// if both values in the split are integers...
 		if (interr1 == nil) && (interr2 == nil) {
 			prop.Type = "integer"
-			prop.Minimum = math.Trunc(math.Min(fltval1, fltval2))
-			prop.Maximum = math.Trunc(math.Max(fltval1, fltval2))
+			prop.Minimum = float64(math.Trunc(math.Min(fltval1, fltval2)))
+			prop.Maximum = float64(math.Trunc(math.Max(fltval1, fltval2)))
+			prop.Example = int(intVal)
 
 			// if both are floats ...
 		} else if (flterr1 == nil) && (flterr2 == nil) {
 			prop.Type = "number"
-			prop.Minimum = math.Min(fltval1, fltval2)
-			prop.Maximum = math.Max(fltval1, fltval2)
+			prop.Minimum = float64(math.Min(fltval1, fltval2))
+			prop.Maximum = float64(math.Max(fltval1, fltval2))
+			prop.Example = float64(fltval1)
 
 			// else assume they are strings
 		} else {
 			prop.Type = "string"
-			prop.Enum = stringSliceToInterface(split)
+			prop.Enum = stringSliceToInterface(split, "string")
+
+			//prop.Enum = stringSliceToInterface(split)
 			prop.Format, _ = introspectFormat(split[0])
 			prop.Example = split[0]
 		}
 
 	} else {
-		prop.Enum = stringSliceToInterface(split)
-		prop.Type = "string"
-		prop.Format, _ = introspectFormat(split[0])
-		prop.Example = split[0]
+
+		if interr1 == nil {
+			prop.Type = "integer"
+			prop.Example = int(intVal)
+		} else if flterr1 == nil {
+			prop.Type = "number"
+			prop.Example = float64(fltval1)
+		} else {
+			prop.Type = "string"
+			prop.Format, _ = introspectFormat(split[0])
+			prop.Example = split[0]
+
+		}
+		prop.Enum = stringSliceToInterface(split, prop.Type)
 	}
 
 }
 
 // processNumber determines if the value is a float or an integer
 // It returns a property reference with the number type.
-// TODO - should this just return a string?
 func processNumber(v reflect.Value) *Schema {
 	prop := &Schema{}
 	if math.Trunc(v.Float()) == v.Float() {
 		prop.Type = "integer"
-		prop.Example = v.Float()
+		prop.Example = math.Trunc(v.Float())
 	} else {
 		prop.Type = "number"
-		prop.Example = v.Int()
+		prop.Example = v.Float()
 	}
 	return prop
 }
@@ -246,6 +260,7 @@ func processNumber(v reflect.Value) *Schema {
 func (prop *Schema) buildSliceProperty(name string, i *Schema,
 	v reflect.Value,
 	m map[string]*Schema) (err error) {
+	var tmpSchema *Schema
 
 	prop.Type = "array"
 	for it := 0; it < v.Len(); it++ {
@@ -256,6 +271,20 @@ func (prop *Schema) buildSliceProperty(name string, i *Schema,
 			appendSubtype(name, m)
 			prop.Items = &Schema{}
 			prop.Items.Ref = MakeRef(strings.Title(name))
+			break
+		case "string":
+			tmpSchema = processString(sanitized)
+			i.Example = tmpSchema.Example
+			prop.Type = "array"
+			prop.Items = i
+			i.Type = datatype
+			break
+		case "number":
+			tmpSchema = processNumber(sanitized)
+			i.Example = tmpSchema.Example
+			i.Type = datatype
+			prop.Type = "array"
+			prop.Items = i
 			break
 		default:
 			prop.Type = "array"
@@ -373,10 +402,20 @@ func DeRef(defName string) string {
 	return strings.TrimPrefix(defName, REFPREFIX)
 }
 
-func stringSliceToInterface(in []string) (out []interface{}) {
+func stringSliceToInterface(in []string, typ string) (out []interface{}) {
 	out = make([]interface{}, len(in))
 	for index, value := range in {
-		out[index] = value
+		var outVal interface{}
+		// needs to be cleaned up
+		if typ == "integer" {
+			outVal, _ = strconv.ParseInt(value, 10, 0)
+		} else if typ == "number" {
+			outVal, _ = strconv.ParseFloat(value, 32)
+			outVal = float64(outVal.(float64))
+		} else {
+			outVal = value
+		}
+		out[index] = outVal
 	}
 	return
 }

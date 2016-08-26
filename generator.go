@@ -28,12 +28,10 @@ func LoadDescriptionFromDb(db Db_backend,
 
 	rd := new(Swagger)
 	err := db.Load(SwaggerResourceDB, ResourceDescriptionName, rd)
-	fmt.Println("~", err)
 
 	if err != nil {
 		//TODO - fix this stupid shadowing issue
 		rd = cnf.SwaggerTemplate
-		fmt.Println(rd)
 		return rd, nil
 	}
 	return rd, err
@@ -347,12 +345,11 @@ func makeCollectionOperation(schemaName string, schema *Schema,
 		Description: "A collection of " + schemaName,
 	}
 
-	fmt.Println(schemaName)
-	fmt.Println("schema properties", schema.Properties)
-
 	// add the parameters
 	getOp.Parameters = getCommonGetParams(cnf)
 	for propName, prop := range schema.Properties {
+		fmt.Println("property: ", propName, prop.Type, prop)
+
 		switch prop.Type {
 		// if there is no type, the item is a ref
 		// don't add any properties...
@@ -373,6 +370,10 @@ func makeCollectionOperation(schemaName string, schema *Schema,
 			break
 		// ints and numbers...
 		case "number":
+			params := makeNumParams(propName, prop)
+			fmt.Printf("%+v", params)
+			getOp.Parameters = append(getOp.Parameters, params...)
+			break
 		case "integer":
 			params := makeNumParams(propName, prop)
 			getOp.Parameters = append(getOp.Parameters, params...)
@@ -467,7 +468,9 @@ func makeArrayParams(propName string, schema *Schema) (p []*Parameter) {
 // makeNumParam makes query parameters for numerical values.  If the
 // property does NOT have an enum property, a range query is defined.
 func makeNumParams(propName string, schema *Schema) (p []*Parameter) {
-	pr := &Parameter{
+	fmt.Println(propName)
+	p = make([]*Parameter, 0, 0)
+	pr := Parameter{
 		Type:    schema.Type,
 		Minimum: schema.Minimum,
 		Maximum: schema.Maximum,
@@ -475,9 +478,8 @@ func makeNumParams(propName string, schema *Schema) (p []*Parameter) {
 		In:      "query",
 		Name:    propName,
 	}
-	p = append(p, pr)
 
-	if len(pr.Enum) == 0 {
+	if len(schema.Enum) == 0 {
 		prRange := pr
 		prRange.Type = "array"
 		prRange.Items = &Items{
@@ -488,9 +490,11 @@ func makeNumParams(propName string, schema *Schema) (p []*Parameter) {
 		}
 		prRange.CollectionFormat = "csv"
 		prRange.Name = propName + "Range"
-		p = append(p, prRange)
+		p = append(p, &prRange)
+	} else {
+		pr.Enum = schema.Enum
 	}
-
+	p = append(p, &pr)
 	return
 }
 

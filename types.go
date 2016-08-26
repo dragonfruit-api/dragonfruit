@@ -97,9 +97,9 @@ type Schema struct {
 	Description      string        `json:"description,omitempty"`
 	Default          interface{}   `json:"default,omitempty"`
 	MultipleOf       int           `json:"multipleOf,omitempty"`
-	Maximum          float64       `json:"maximum,string,omitempty"`
+	Maximum          float64       `json:"maximum,omitempty"`
 	ExclusiveMaximum bool          `json:"exclusiveMaximum,omitempty"`
-	Minimum          float64       `json:"minimum,string,omitempty"`
+	Minimum          float64       `json:"minimum,omitempty"`
 	ExclusiveMinimum bool          `json:"exclusiveMinimum,omitempty"`
 	MaxLength        int           `json:"maxLength,omitempty"`
 	MinLength        int           `json:"minLength,omitempty"`
@@ -176,9 +176,9 @@ type Parameter struct {
 	Items            *Items        `json:"items,omitempty"`
 	CollectionFormat string        `json:"collectionFormat,omitempty"`
 	Default          interface{}   `json:"default,omitempty"`
-	Maximum          float64       `json:"maximum,string,omitempty"`
+	Maximum          float64       `json:"maximum,omitempty"`
 	ExclusiveMaximum bool          `json:"exclusiveMaximum,omitempty"`
-	Minimum          float64       `json:"minimum,string,omitempty"`
+	Minimum          float64       `json:"minimum,omitempty"`
 	ExclusiveMinimum bool          `json:"exclusiveMinimum,omitempty"`
 	MaxLength        int           `json:"maxLength,omitempty"`
 	MinLength        int           `json:"minLength,omitempty"`
@@ -199,9 +199,9 @@ type Items struct {
 	Items            *Items        `json:"items,omitempty"`
 	CollectionFormat string        `json:"collectionFormat,omitempty"`
 	Default          interface{}   `json:"default,omitempty"`
-	Maximum          float64       `json:"maximum,string,omitempty"`
+	Maximum          float64       `json:"maximum,omitempty"`
 	ExclusiveMaximum bool          `json:"exclusiveMaximum,omitempty"`
-	Minimum          float64       `json:"minimum,string,omitempty"`
+	Minimum          float64       `json:"minimum,omitempty"`
 	ExclusiveMinimum bool          `json:"exclusiveMinimum,omitempty"`
 	MaxLength        int           `json:"maxLength,omitempty"`
 	MinLength        int           `json:"minLength,omitempty"`
