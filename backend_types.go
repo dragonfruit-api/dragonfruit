@@ -38,16 +38,9 @@ type Db_backend interface {
 	// connect to a backend server
 	Connect(string) error
 
-	// Save a document to persistence.
-	// (database, document id, contents)
-	Save(string, string, interface{}) (string, interface{}, error)
+	LoadDefinition(Conf) (*Swagger, error)
 
-	// Load a document from persistence
-	// (database, document id, thing to unmarshal into)
-	Load(string, string, interface{}) error
-
-	// database, id, rev
-	Delete(string, string, string) error
+	SaveDefinition(*Swagger) error
 
 	// external API
 	// Query the datastore with a QueryParams struct

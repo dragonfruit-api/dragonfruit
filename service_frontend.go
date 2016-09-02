@@ -2,11 +2,13 @@ package dragonfruit
 
 import (
 	"encoding/json"
+
 	"github.com/go-martini/martini"
 	"io/ioutil"
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 var (
@@ -14,6 +16,7 @@ var (
 	ReqPathRe   *regexp.Regexp
 	GetDbRe     *regexp.Regexp
 	ViewPathRe  *regexp.Regexp
+	PathParamRe *regexp.Regexp
 	EndOfPathRe *regexp.Regexp
 	PostPathRe  *regexp.Regexp
 	m           *martini.ClassicMartini
@@ -33,6 +36,8 @@ func init() {
 	PathRe = regexp.MustCompile("(/([[:word:]]*)/({([[:word:]]*)}))")
 	ReqPathRe = regexp.MustCompile("(/([[:word:]]*)/([[:word:]]*))")
 	GetDbRe = regexp.MustCompile("^/([[:word:]]*)/?")
+	// translates Martini paths
+	PathParamRe = regexp.MustCompile("(/([[:word:]]*)(/:[[:word:]]*)?)")
 	ViewPathRe = regexp.MustCompile("(/([[:word:]]*)(/{[[:word:]]*})?)")
 	EndOfPathRe = regexp.MustCompile("[^/]+$")
 	m = martini.Classic()
@@ -48,7 +53,7 @@ func GetMartiniInstance(cnf Conf) *martini.ClassicMartini {
 // ServeDocSet sets up the paths which serve the api documentation
 func ServeDocSet(m *martini.ClassicMartini, db Db_backend, cnf Conf) {
 	m.Map(db)
-	rd, err := LoadDescriptionFromDb(db, cnf)
+	rd, err := db.LoadDefinition(cnf)
 	if err != nil {
 		panic(err)
 	}
@@ -86,7 +91,7 @@ func NewApiFromSpec(path string, pathitem *PathItem, rd *Swagger, m *martini.Cla
 
 	for method, operation := range pathArr {
 		if operation != nil {
-			addOperation(path, pathitem, method, rd, operation, m)
+			addOperation(rd.BasePath+path, pathitem, method, rd, operation, m)
 		}
 	}
 
@@ -104,7 +109,7 @@ func addOperation(path string,
 	m *martini.ClassicMartini,
 ) {
 
-	path = translatePath(path)
+	path = TranslatePath(path)
 	produces := append(rd.Produces, op.Produces...)
 
 	consumes := append(rd.Consumes, op.Consumes...)
@@ -125,6 +130,7 @@ func addOperation(path string,
 				return 409, string(outerr)
 			}
 
+			path = strings.TrimPrefix(path, rd.BasePath)
 			q := QueryParams{
 				Path:        path,
 				PathParams:  outParams,
@@ -159,6 +165,7 @@ func addOperation(path string,
 				return 409, string(outerr)
 			}
 
+			path = strings.TrimPrefix(path, rd.BasePath)
 			q := QueryParams{
 				Path:       path,
 				PathParams: outParams,
@@ -186,11 +193,14 @@ func addOperation(path string,
 				outerr, _ := json.Marshal(err.Error())
 				return 409, string(outerr)
 			}
+
+			path = strings.TrimPrefix(path, rd.BasePath)
 			q := QueryParams{
 				Path:       path,
 				PathParams: outParams,
 				Body:       val,
 			}
+
 			doc, err := db.Update(q, PUT)
 			if err != nil {
 				outerr, _ := json.Marshal(err.Error())
@@ -212,11 +222,14 @@ func addOperation(path string,
 				outerr, _ := json.Marshal(err.Error())
 				return 409, string(outerr)
 			}
+
+			path = strings.TrimPrefix(path, rd.BasePath)
 			q := QueryParams{
 				Path:       path,
 				PathParams: outParams,
 				Body:       val,
 			}
+
 			doc, err := db.Update(q, PATCH)
 			if err != nil {
 				outerr, _ := json.Marshal(err.Error())
@@ -237,6 +250,8 @@ func addOperation(path string,
 				outerr, _ := json.Marshal(err.Error())
 				return 409, string(outerr)
 			}
+
+			path = strings.TrimPrefix(path, rd.BasePath)
 			q := QueryParams{
 				Path:       path,
 				PathParams: outParams,
@@ -307,7 +322,7 @@ func addHeaders(h http.Header, headerType string, headArray []string) {
 
 // translatePath transforms a path from swagger-doc format (/path/{id}) to
 // Martini format (/path/:id).
-func translatePath(path string) (outpath string) {
+func TranslatePath(path string) (outpath string) {
 	outpath = PathRe.ReplaceAllString(path, "/$2/:$4")
 	return
 }

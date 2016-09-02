@@ -71,11 +71,6 @@ type ContactLicences struct {
 	Email string `json:"email,omitempty"`
 }
 
-// Save the resource description to the database backend.
-func (sw *Swagger) Save(db Db_backend) {
-	db.Save(SwaggerResourceDB, ResourceDescriptionName, sw)
-}
-
 // Describes an API
 type PathItem struct {
 	Ref        *PathItem    `json:"$ref,omitempty"`

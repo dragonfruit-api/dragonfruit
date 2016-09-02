@@ -1,7 +1,6 @@
 package backend_couchdb
 
 import (
-	"fmt"
 	"github.com/gedex/inflector"
 	"github.com/ideo/dragonfruit"
 	"strings"
@@ -42,7 +41,7 @@ func (d *Db_backend_couch) Prep(database string,
 		vd.makeQueryParamView(api, api.Get, resource)
 
 	}
-	d.Save(database, id, vd)
+	d.save(database, id, vd)
 	return nil
 }
 
@@ -60,14 +59,11 @@ func (vd *viewDoc) makeQueryParamView(
 	resource *dragonfruit.Swagger) {
 
 	modelName := dragonfruit.DeRef(op.Responses["200"].Schema.Ref)
-	fmt.Printf("%+v\n", resource.Definitions)
 	responseModel := strings.Replace(modelName, strings.Title(dragonfruit.ContainerName), "", -1)
-	fmt.Println(responseModel)
 
 	model := resource.Definitions[responseModel]
 	for _, param := range op.Parameters {
 		if param.In == "query" {
-			fmt.Println(model)
 			for propname, prop := range model.Properties {
 				if param.Name == propname {
 					if prop.Type != "array" {
@@ -89,8 +85,8 @@ func (vd *viewDoc) makePathParamView(api *dragonfruit.PathItem,
 	resource *dragonfruit.Swagger) {
 
 	matches := dragonfruit.PathRe.FindAllStringSubmatch(path, -1)
-	viewname := makePathViewName(path)
-	fmt.Println("prepping path view name: ", path, viewname)
+	tpath := dragonfruit.TranslatePath(path)
+	viewname := makePathViewName(tpath)
 
 	if len(matches) == 1 {
 		// regex voodoo

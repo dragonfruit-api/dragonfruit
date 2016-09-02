@@ -3,14 +3,17 @@ package backend_couchdb
 import (
 	"encoding/json"
 	"errors"
-	"github.com/pborman/uuid"
-	//"fmt"
-	"fmt"
 	"github.com/fjl/go-couchdb"
 	"github.com/ideo/dragonfruit"
+	"github.com/pborman/uuid"
 	"reflect"
 	"strconv"
 	"strings"
+)
+
+const (
+	SwaggerResourceDB       = "swagger_docs"
+	ResourceDescriptionName = "swagger_resource"
 )
 
 // findPropertyFromPath introspects a path and returns the property that
@@ -93,7 +96,7 @@ func (d *Db_backend_couch) Update(params dragonfruit.QueryParams, operation int)
 		reflect.ValueOf(v),
 		operation)
 	database := getDatabaseName(params)
-	_, out, err := d.Save(database, id, newdoc.Interface())
+	_, out, err := d.save(database, id, newdoc.Interface())
 	if err != nil {
 		return out, err
 	}
@@ -290,7 +293,7 @@ func (d *Db_backend_couch) Insert(params dragonfruit.QueryParams) (interface{},
 	// if there are no path parameters, this is a new primary document
 	// just save it
 	if len(params.PathParams) == 0 {
-		_, doc, err = d.Save(database, uuid.New(), document)
+		_, doc, err = d.save(database, uuid.New(), document)
 	} else {
 		pathmap, couchdoc, id, newDoc, err := d.getPathSpecificStuff(params)
 		if err != nil {
@@ -301,7 +304,7 @@ func (d *Db_backend_couch) Insert(params dragonfruit.QueryParams) (interface{},
 			reflect.ValueOf(couchdoc.Value),
 			reflect.ValueOf(newDoc),
 			dragonfruit.POST)
-		_, _, err = d.Save(database, id, docVal.Interface())
+		_, _, err = d.save(database, id, docVal.Interface())
 		doc = partialVal.Interface()
 	}
 
@@ -312,6 +315,30 @@ func (d *Db_backend_couch) Insert(params dragonfruit.QueryParams) (interface{},
 	out, err := sanitizeDoc(doc)
 
 	return out, err
+}
+
+// LoadDescriptionFromDb loads a resource description from a database backend.
+// (see the backend stuff and types).
+func (d *Db_backend_couch) LoadDefinition(cnf dragonfruit.Conf) (*dragonfruit.Swagger, error) {
+
+	rd := new(dragonfruit.Swagger)
+	err := d.load(SwaggerResourceDB, ResourceDescriptionName, rd)
+
+	if err != nil {
+		//TODO - fix this stupid shadowing issue
+		rd = cnf.SwaggerTemplate
+		return rd, nil
+	}
+	return rd, err
+}
+
+// LoadDescriptionFromDb loads a resource description from a database backend.
+// (see the backend stuff and types).
+func (d *Db_backend_couch) SaveDefinition(sw *dragonfruit.Swagger) error {
+
+	_, _, err := d.save(SwaggerResourceDB, ResourceDescriptionName, sw)
+
+	return err
 }
 
 // Remove deletes a document from the database
@@ -330,7 +357,7 @@ func (d *Db_backend_couch) Remove(params dragonfruit.QueryParams) error {
 		target := result.Rows[0]
 		id := target.Id
 		rev, err := d.client.DB(database).Rev(id)
-		return d.Delete(database, id, rev)
+		return d.delete(database, id, rev)
 	} else {
 		pathmap, couchdoc, id, newDoc, err := d.getPathSpecificStuff(params)
 		if err != nil {
@@ -347,7 +374,7 @@ func (d *Db_backend_couch) Remove(params dragonfruit.QueryParams) error {
 			return err
 		}
 
-		_, _, err = d.Save(database, id, docVal.Interface())
+		_, _, err = d.save(database, id, docVal.Interface())
 
 		return err
 	}
@@ -356,7 +383,7 @@ func (d *Db_backend_couch) Remove(params dragonfruit.QueryParams) error {
 
 // Delete removes a document from the database
 // this will be made private
-func (d *Db_backend_couch) Delete(database string, id string,
+func (d *Db_backend_couch) delete(database string, id string,
 	rev string) error {
 
 	_, err := d.client.DB(database).Delete(id, rev)
@@ -365,7 +392,7 @@ func (d *Db_backend_couch) Delete(database string, id string,
 
 // Save saves a document to the database.
 // This should also be made
-func (d *Db_backend_couch) Save(database string,
+func (d *Db_backend_couch) save(database string,
 	documentId string,
 	document interface{}) (string, interface{}, error) {
 
@@ -436,8 +463,6 @@ func (d *Db_backend_couch) queryView(params dragonfruit.QueryParams) (int,
 	opts := make(map[string]interface{})
 
 	viewName, viewExists := d.pickView(params, opts, limit, offset)
-
-	fmt.Println("view name", viewName, viewExists)
 
 	// if we found a view, query it
 	if viewExists {
@@ -527,7 +552,7 @@ func filterResultSet(result couchDbResponse, params dragonfruit.QueryParams,
 
 // Load loads a document from the database.
 // TODO - THIS WILL PROBABLY MOVE TO A NON-EXPORTED METHOD
-func (d *Db_backend_couch) Load(database string, documentId string, doc interface{}) error {
+func (d *Db_backend_couch) load(database string, documentId string, doc interface{}) error {
 	d.ensureConnection()
 	db, err := d.client.EnsureDB(database)
 	if err != nil {
@@ -556,7 +581,6 @@ func (d *Db_backend_couch) pickView(params dragonfruit.QueryParams,
 	offset int64) (string, bool) {
 
 	viewName := makePathViewName(params.Path)
-	fmt.Println("internal view name", viewName, params.Path)
 
 	// if there's no query parameters to filter, you can go
 	// ahead and use the passed limit and offset
@@ -589,7 +613,7 @@ func (d *Db_backend_couch) pickView(params dragonfruit.QueryParams,
 		return viewName, true
 	}
 
-	viewMatches := dragonfruit.ViewPathRe.FindAllStringSubmatch(params.Path, -1)
+	viewMatches := dragonfruit.PathParamRe.FindAllStringSubmatch(params.Path, -1)
 	// use a non-array key
 	if (len(params.PathParams) == 1) && (len(viewMatches) == 1) {
 		// ugh i know...
@@ -621,6 +645,7 @@ func (d *Db_backend_couch) pickView(params dragonfruit.QueryParams,
 		opts["startkey"] = key
 		opts["endkey"] = append(key, tmpMap)
 	}
+
 	return viewName, true
 
 }
@@ -639,7 +664,7 @@ func (d *Db_backend_couch) findQueryView(params dragonfruit.QueryParams,
 	var vd viewDoc
 	//d.L
 	database := getDatabaseName(params)
-	err := d.Load(database, "_design/core", &vd)
+	err := d.load(database, "_design/core", &vd)
 	if err != nil {
 		panic(err)
 	}

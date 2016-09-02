@@ -1,10 +1,53 @@
 package dragonfruit
 
 import (
-	"fmt"
 	"github.com/gedex/inflector"
 	"strings"
 )
+
+func RegisterType(d Db_backend, byt []byte, cnf Conf, resourceType string, path string) error {
+	var err error
+
+	sw, swerr := d.LoadDefinition(cnf)
+
+	if swerr != nil {
+		return swerr
+	}
+
+	resourceType = inflector.Singularize(resourceType)
+	if path == "" {
+		path = inflector.Pluralize(resourceType)
+	}
+
+	modelMap, maperr := Decompose(byt, resourceType, cnf)
+
+	if err != nil {
+		return maperr
+	}
+
+	for k, v := range modelMap {
+		sw.Definitions[k] = v
+	}
+
+	upstreamParams := make([]*Parameter, 0)
+	pathitems := MakeCommonAPIs("",
+		path,
+		strings.Title(resourceType),
+		modelMap,
+		upstreamParams,
+		cnf)
+
+	for k, v := range pathitems {
+		sw.Paths[k] = v
+	}
+
+	d.SaveDefinition(sw)
+	preperror := d.Prep(path, sw)
+	if preperror != nil {
+		return preperror
+	}
+	return err
+}
 
 // getCommonResponseCodes loads a set of response codes that most of the APIs
 // return.
@@ -19,22 +62,6 @@ func getCommonResponseCodes(cnf Conf, typ string) map[string]*Response {
 // all collection get operations (like limit and offset).
 func getCommonGetParams(cnf Conf) []*Parameter {
 	return cnf.CommonGetParams
-}
-
-// LoadDescriptionFromDb loads a resource description from a database backend.
-// (see the backend stuff and types).
-func LoadDescriptionFromDb(db Db_backend,
-	cnf Conf) (*Swagger, error) {
-
-	rd := new(Swagger)
-	err := db.Load(SwaggerResourceDB, ResourceDescriptionName, rd)
-
-	if err != nil {
-		//TODO - fix this stupid shadowing issue
-		rd = cnf.SwaggerTemplate
-		return rd, nil
-	}
-	return rd, err
 }
 
 // MakeCommonAPIs creates a set of operations and APIs for a model.
@@ -342,13 +369,12 @@ func makeCollectionOperation(schemaName string, schema *Schema,
 
 	getOp.Responses["200"] = &Response{
 		Schema:      ioSchema,
-		Description: "A collection of " + schemaName,
+		Description: "A collection of " + inflector.Pluralize(schemaName),
 	}
 
 	// add the parameters
 	getOp.Parameters = getCommonGetParams(cnf)
 	for propName, prop := range schema.Properties {
-		fmt.Println("property: ", propName, prop.Type, prop)
 
 		switch prop.Type {
 		// if there is no type, the item is a ref
@@ -371,7 +397,6 @@ func makeCollectionOperation(schemaName string, schema *Schema,
 		// ints and numbers...
 		case "number":
 			params := makeNumParams(propName, prop)
-			fmt.Printf("%+v", params)
 			getOp.Parameters = append(getOp.Parameters, params...)
 			break
 		case "integer":
@@ -468,7 +493,6 @@ func makeArrayParams(propName string, schema *Schema) (p []*Parameter) {
 // makeNumParam makes query parameters for numerical values.  If the
 // property does NOT have an enum property, a range query is defined.
 func makeNumParams(propName string, schema *Schema) (p []*Parameter) {
-	fmt.Println(propName)
 	p = make([]*Parameter, 0, 0)
 	pr := Parameter{
 		Type:    schema.Type,

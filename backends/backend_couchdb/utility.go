@@ -59,7 +59,7 @@ func makeQueryViewName(param string) string {
 
 // makePathViewName makes canonical view names for path parameters
 func makePathViewName(path string) string {
-	matches := dragonfruit.ViewPathRe.FindAllStringSubmatch(path, -1)
+	matches := dragonfruit.PathParamRe.FindAllStringSubmatch(path, -1)
 	out := make([]string, 0)
 
 	for _, match := range matches {
