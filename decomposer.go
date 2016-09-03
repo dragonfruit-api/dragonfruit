@@ -67,7 +67,11 @@ func appendSubtype(baseSubtype string, d map[string]*Schema) string {
 		Type: "string",
 	}
 	d[subtype].Required = []string{"containerType"}
-	d[subtype].AllOf = []*Schema{d[cname]}
+	d[subtype].AllOf = []*Schema{
+		&Schema{
+			Ref: MakeRef(cname),
+		},
+	}
 	return subtype
 }
 

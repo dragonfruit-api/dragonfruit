@@ -321,7 +321,7 @@ func (d *Db_backend_couch) Insert(params dragonfruit.QueryParams) (interface{},
 // (see the backend stuff and types).
 func (d *Db_backend_couch) LoadDefinition(cnf dragonfruit.Conf) (*dragonfruit.Swagger, error) {
 
-	rd := new(dragonfruit.Swagger)
+	rd := &dragonfruit.Swagger{}
 	err := d.load(SwaggerResourceDB, ResourceDescriptionName, rd)
 
 	if err != nil {

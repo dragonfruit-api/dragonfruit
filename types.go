@@ -59,9 +59,9 @@ type ExternalDoc struct {
 }
 
 type Tag struct {
-	Name         string `json:"name"`
-	Description  string `json:"description,omitempty"`
-	ExternalDocs string `json:"externalDocs,omitempty"`
+	Name         string       `json:"name"`
+	Description  string       `json:"description,omitempty"`
+	ExternalDocs *ExternalDoc `json:"externalDocs,omitempty"`
 }
 
 // A swagger contact or license reference
@@ -99,7 +99,7 @@ type Schema struct {
 	MaxLength        int           `json:"maxLength,omitempty"`
 	MinLength        int           `json:"minLength,omitempty"`
 	Pattern          string        `json:"minLength,omitempty"`
-	MaxItems         int           `json:"maxitems,omitempy"`
+	MaxItems         int           `json:"maxitems,omitempty"`
 	MinItems         int           `json:"minitems,omitempty"`
 	UniqueItems      bool          `json:"uniqueItems,omitempty"`
 	MaxProperties    int           `json:"maxProperties,omitempty"`
@@ -178,7 +178,7 @@ type Parameter struct {
 	MaxLength        int           `json:"maxLength,omitempty"`
 	MinLength        int           `json:"minLength,omitempty"`
 	Pattern          string        `json:"minLength,omitempty"`
-	MaxItems         int           `json:"maxitems,omitempy"`
+	MaxItems         int           `json:"maxitems,omitempty"`
 	MinItems         int           `json:"minitems,omitempty"`
 	UniqueItems      bool          `json:"uniqueItems,omitempty"`
 	MaxProperties    int           `json:"maxProperties,omitempty"`
@@ -201,7 +201,7 @@ type Items struct {
 	MaxLength        int           `json:"maxLength,omitempty"`
 	MinLength        int           `json:"minLength,omitempty"`
 	Pattern          string        `json:"minLength,omitempty"`
-	MaxItems         int           `json:"maxitems,omitempy"`
+	MaxItems         int           `json:"maxitems,omitempty"`
 	MinItems         int           `json:"minitems,omitempty"`
 	UniqueItems      bool          `json:"uniqueItems,omitempty"`
 	MaxProperties    int           `json:"maxProperties,omitempty"`

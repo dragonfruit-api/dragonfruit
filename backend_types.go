@@ -17,7 +17,7 @@ type QueryParams struct {
 type ContainerMeta struct {
 	ResponseCode    int    `json:"responseCode,omitempty"`
 	ResponseMessage string `json:"responseMessage,omitempty"`
-	Offset          int    `json:"offset,omitempty"`
+	Offset          int    `json:"offset"`
 	Limit           int    `json:"limit,omitempty"`
 	Total           int    `json:"total,omitempty"`
 	Count           int    `json:"count,omitempty"`
