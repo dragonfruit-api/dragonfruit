@@ -356,6 +356,10 @@ func (d *Db_backend_couch) Remove(params dragonfruit.QueryParams) error {
 
 		target := result.Rows[0]
 		id := target.Id
+		err = d.ensureConnection()
+		if err != nil {
+			return err
+		}
 		rev, err := d.client.DB(database).Rev(id)
 		return d.delete(database, id, rev)
 	} else {
@@ -385,7 +389,6 @@ func (d *Db_backend_couch) Remove(params dragonfruit.QueryParams) error {
 // this will be made private
 func (d *Db_backend_couch) delete(database string, id string,
 	rev string) error {
-
 	_, err := d.client.DB(database).Delete(id, rev)
 	return err
 }
@@ -395,6 +398,10 @@ func (d *Db_backend_couch) delete(database string, id string,
 func (d *Db_backend_couch) save(database string,
 	documentId string,
 	document interface{}) (string, interface{}, error) {
+	err := d.ensureConnection()
+	if err != nil {
+		return "", nil, err
+	}
 
 	db, err := d.client.EnsureDB(database)
 
@@ -457,6 +464,12 @@ func (d *Db_backend_couch) queryView(params dragonfruit.QueryParams) (int,
 	}
 
 	database := getDatabaseName(params)
+
+	err = d.ensureConnection()
+	if err != nil {
+		return 0, couchDbResponse{}, err
+	}
+
 	db := d.client.DB(database)
 
 	// map to hold view query options
@@ -551,7 +564,6 @@ func filterResultSet(result couchDbResponse, params dragonfruit.QueryParams,
 }
 
 // Load loads a document from the database.
-// TODO - THIS WILL PROBABLY MOVE TO A NON-EXPORTED METHOD
 func (d *Db_backend_couch) load(database string, documentId string, doc interface{}) error {
 	d.ensureConnection()
 	db, err := d.client.EnsureDB(database)

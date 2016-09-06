@@ -109,7 +109,6 @@ func (d *Db_backend_couch) ensureConnection() (err error) {
 			return err
 		}
 		if bytes.Contains(s_out, []byte("Apache CouchDB is not running.")) {
-			fmt.Println("not running")
 			time.Sleep(1000 * time.Millisecond)
 			return s()
 		}
