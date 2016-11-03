@@ -12,7 +12,9 @@ import (
 )
 
 const (
-	REFPREFIX = "#/definitions/"
+	REFPREFIX   = "#/definitions/"
+	ENUMSPLIT   = "|"
+	MINMAXSPLIT = "<>"
 )
 
 // Decompose is the only exported function in this file.  It takes a set of
@@ -172,73 +174,77 @@ func processString(v reflect.Value) *Schema {
 
 	tst := v.String()
 
-	if strings.Contains(tst, "|") {
+	if strings.Contains(tst, ENUMSPLIT) {
 		prop.processSplit(tst)
+	} else if strings.Contains(tst, MINMAXSPLIT) {
+		prop.processMinMax(tst)
 	} else {
 		prop.Format, _ = introspectFormat(tst)
 	}
 	return prop
 }
 
-// processSplit handles enumerated value hints (basically, strings with a pipe
-// symbol).
+// processMinMax sets integer and float min and max values when a
+// min/max symbol is passed through.
 // It mutates the property passed to it.
-func (prop *Schema) processSplit(str string) {
-	split := strings.Split(str, "|")
+func (prop *Schema) processMinMax(str string) {
+	split := strings.Split(str, MINMAXSPLIT)
 
-	// if the string parses as an int or a float
-	// ... set the min and max and the type to number
-	// this is kind of ugly...
 	intVal, interr1 := strconv.ParseInt(split[0], 10, 0)
 	_, interr2 := strconv.ParseInt(split[1], 10, 0)
 	fltval1, flterr1 := strconv.ParseFloat(split[0], 32)
 	fltval2, flterr2 := strconv.ParseFloat(split[1], 32)
 
-	// test for max and min values
-	// if there are only two elements in the split array,
-	//
-	if len(split) == 2 {
+	// if both values in the split are integers...
+	if (interr1 == nil) && (interr2 == nil) {
+		prop.Type = "integer"
+		prop.Minimum = float64(math.Trunc(math.Min(fltval1, fltval2)))
+		prop.Maximum = float64(math.Trunc(math.Max(fltval1, fltval2)))
+		prop.Example = int(intVal)
 
-		// if both values in the split are integers...
-		if (interr1 == nil) && (interr2 == nil) {
-			prop.Type = "integer"
-			prop.Minimum = float64(math.Trunc(math.Min(fltval1, fltval2)))
-			prop.Maximum = float64(math.Trunc(math.Max(fltval1, fltval2)))
-			prop.Example = int(intVal)
+		// if both are floats ...
+	} else if (flterr1 == nil) && (flterr2 == nil) {
+		prop.Type = "number"
+		prop.Minimum = float64(math.Min(fltval1, fltval2))
+		prop.Maximum = float64(math.Max(fltval1, fltval2))
+		prop.Example = float64(fltval1)
 
-			// if both are floats ...
-		} else if (flterr1 == nil) && (flterr2 == nil) {
-			prop.Type = "number"
-			prop.Minimum = float64(math.Min(fltval1, fltval2))
-			prop.Maximum = float64(math.Max(fltval1, fltval2))
-			prop.Example = float64(fltval1)
-
-			// else assume they are strings
-		} else {
-			prop.Type = "string"
-			prop.Enum = stringSliceToInterface(split, "string")
-
-			//prop.Enum = stringSliceToInterface(split)
-			prop.Format, _ = introspectFormat(split[0])
-			prop.Example = split[0]
-		}
-
+		// else assume they are strings and that this is an enum...
 	} else {
+		prop.Type = "string"
+		prop.Enum = stringSliceToInterface(split, "string")
 
-		if interr1 == nil {
-			prop.Type = "integer"
-			prop.Example = int(intVal)
-		} else if flterr1 == nil {
-			prop.Type = "number"
-			prop.Example = float64(fltval1)
-		} else {
-			prop.Type = "string"
-			prop.Format, _ = introspectFormat(split[0])
-			prop.Example = split[0]
-
-		}
-		prop.Enum = stringSliceToInterface(split, prop.Type)
+		//prop.Enum = stringSliceToInterface(split)
+		prop.Format, _ = introspectFormat(split[0])
+		prop.Example = split[0]
 	}
+}
+
+// processSplit handles enumerated value hints (basically, strings with a pipe
+// symbol).
+// It mutates the property passed to it.
+func (prop *Schema) processSplit(str string) {
+	split := strings.Split(str, ENUMSPLIT)
+
+	// if the string parses as an int or a float
+	// ... set the min and max and the type to number
+	// this is kind of ugly...
+	intVal, interr1 := strconv.ParseInt(split[0], 10, 0)
+	fltval1, flterr1 := strconv.ParseFloat(split[0], 32)
+
+	if interr1 == nil {
+		prop.Type = "integer"
+		prop.Example = int(intVal)
+	} else if flterr1 == nil {
+		prop.Type = "number"
+		prop.Example = float64(fltval1)
+	} else {
+		prop.Type = "string"
+		prop.Format, _ = introspectFormat(split[0])
+		prop.Example = split[0]
+
+	}
+	prop.Enum = stringSliceToInterface(split, prop.Type)
 
 }
 
