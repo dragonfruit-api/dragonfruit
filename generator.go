@@ -5,6 +5,11 @@ import (
 	"strings"
 )
 
+const (
+	RANGESTART = "RangeStart"
+	RANGEEND   = "RangeEnd"
+)
+
 func RegisterType(d Db_backend, byt []byte, cnf Conf, resourceType string, path string) error {
 	var err error
 
@@ -494,7 +499,7 @@ func makeArrayParams(propName string, schema *Schema) (p []*Parameter) {
 // property does NOT have an enum property, a range query is defined.
 func makeNumParams(propName string, schema *Schema) (p []*Parameter) {
 	p = make([]*Parameter, 0, 0)
-	pr := Parameter{
+	pr := &Parameter{
 		Type:    schema.Type,
 		Minimum: schema.Minimum,
 		Maximum: schema.Maximum,
@@ -504,21 +509,24 @@ func makeNumParams(propName string, schema *Schema) (p []*Parameter) {
 	}
 
 	if len(schema.Enum) == 0 {
-		prRange := pr
-		prRange.Type = "array"
-		prRange.Items = &Items{
-			Type:    schema.Type,
-			Minimum: schema.Minimum,
-			Maximum: schema.Maximum,
-			Format:  schema.Format,
+		rangeStartField := &Parameter{
+			Type:   schema.Type,
+			In:     "query",
+			Format: schema.Format,
+			Name:   propName + RANGESTART,
 		}
-		prRange.CollectionFormat = "csv"
-		prRange.Name = propName + "Range"
-		p = append(p, &prRange)
+		p = append(p, rangeStartField)
+		rangeEndField := &Parameter{
+			Type:   schema.Type,
+			In:     "query",
+			Format: schema.Format,
+			Name:   propName + RANGEEND,
+		}
+		p = append(p, rangeEndField)
 	} else {
 		pr.Enum = schema.Enum
 	}
-	p = append(p, &pr)
+	p = append(p, pr)
 	return
 }
 
@@ -534,16 +542,20 @@ func makeStringParams(propName string, schema *Schema) (p []*Parameter) {
 	}
 	p = append(p, pr)
 	if (schema.Format == "date" || schema.Format == "date-time") && len(schema.Enum) == 0 {
-		rangeField := &Parameter{
-			Type:   "array",
+		rangeStartField := &Parameter{
+			Type:   schema.Type,
 			In:     "query",
-			Name:   propName,
 			Format: schema.Format,
+			Name:   propName + RANGESTART,
 		}
-		rangeField.Name = propName + "Range"
-		rangeField.CollectionFormat = "csv"
-
-		p = append(p, rangeField)
+		p = append(p, rangeStartField)
+		rangeEndField := &Parameter{
+			Type:   schema.Type,
+			In:     "query",
+			Format: schema.Format,
+			Name:   propName + RANGEEND,
+		}
+		p = append(p, rangeEndField)
 	}
 
 	return

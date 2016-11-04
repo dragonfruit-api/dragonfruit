@@ -6,6 +6,7 @@ import (
 	"github.com/go-martini/martini"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -123,8 +124,15 @@ func addOperation(path string,
 
 			req.ParseForm()
 
-			// coerce any required path parameters
-			outParams, err := coercePathParam(params, op.Parameters)
+			// coerce path parameters
+			outParams, err := coerceParam(params, op.Parameters)
+			if err != nil {
+				outerr, _ := json.Marshal(err.Error())
+				return 409, string(outerr)
+			}
+
+			// coerce query parameters
+			qParams, err := coerceQueryParam(req.Form, op.Parameters)
 			if err != nil {
 				outerr, _ := json.Marshal(err.Error())
 				return 409, string(outerr)
@@ -134,7 +142,7 @@ func addOperation(path string,
 			q := QueryParams{
 				Path:        path,
 				PathParams:  outParams,
-				QueryParams: req.Form,
+				QueryParams: qParams,
 			}
 
 			result, err := db.Query(q)
@@ -159,7 +167,7 @@ func addOperation(path string,
 			val, err := ioutil.ReadAll(req.Body)
 
 			// coerce any required path parameters
-			outParams, err := coercePathParam(params, op.Parameters)
+			outParams, err := coerceParam(params, op.Parameters)
 			if err != nil {
 				outerr, _ := json.Marshal(err.Error())
 				return 409, string(outerr)
@@ -188,7 +196,7 @@ func addOperation(path string,
 			addHeaders(h, "Accept", consumes)
 
 			val, err := ioutil.ReadAll(req.Body)
-			outParams, err := coercePathParam(params, op.Parameters)
+			outParams, err := coerceParam(params, op.Parameters)
 			if err != nil {
 				outerr, _ := json.Marshal(err.Error())
 				return 409, string(outerr)
@@ -217,7 +225,7 @@ func addOperation(path string,
 			addHeaders(h, "Content-Type", produces)
 			addHeaders(h, "Accept", consumes)
 			val, err := ioutil.ReadAll(req.Body)
-			outParams, err := coercePathParam(params, op.Parameters)
+			outParams, err := coerceParam(params, op.Parameters)
 			if err != nil {
 				outerr, _ := json.Marshal(err.Error())
 				return 409, string(outerr)
@@ -245,7 +253,7 @@ func addOperation(path string,
 
 			addHeaders(h, "Content-Type", produces)
 			addHeaders(h, "Accept", consumes)
-			outParams, err := coercePathParam(params, op.Parameters)
+			outParams, err := coerceParam(params, op.Parameters)
 			if err != nil {
 				outerr, _ := json.Marshal(err.Error())
 				return 409, string(outerr)
@@ -282,13 +290,18 @@ func addOperation(path string,
 	}
 }
 
-// ugh pretending that dynamic typing is a thing
-func coercePathParam(sentParams martini.Params, apiPathParams []*Parameter) (outParams map[string]interface{}, err error) {
+// Coerces string parameters from the path to the type specified
+// in the API definition.
+func coerceParam(sentParams martini.Params,
+	apiPathParams []*Parameter) (outParams map[string]interface{},
+	err error) {
 	outParams = make(map[string]interface{})
+
 	// and here is where we wish Golang had functional-style
 	// list manipulation stuff
 	for key, sentParam := range sentParams {
 		for _, apiParam := range apiPathParams {
+
 			if key == apiParam.Name {
 				switch apiParam.Type {
 				case "integer":
@@ -299,9 +312,65 @@ func coercePathParam(sentParams martini.Params, apiPathParams []*Parameter) (out
 					}
 					outParams[key] = val
 					break
+				case "number":
+					val, parseErr := strconv.ParseFloat(sentParam, 32)
+					if parseErr != nil {
+						err = parseErr
+						return
+					}
+					outParams[key] = val
+					break
 
 				default:
 					outParams[key] = sentParam
+					break
+				}
+				// done with this particular key
+				break
+			}
+		}
+	}
+
+	return
+
+}
+
+// Coerces string parameters from the query to the type specified
+// in the API definition. Returns an error if a param cannot be coerced.
+// TODO - merge with above function to avoid copypasta
+func coerceQueryParam(sentParams url.Values,
+	apiPathParams []*Parameter) (outParams map[string]interface{},
+	err error) {
+	outParams = make(map[string]interface{})
+
+	for key, _ := range sentParams {
+		for _, apiParam := range apiPathParams {
+
+			if key == apiParam.Name {
+
+				sentParam := sentParams.Get(key)
+
+				switch apiParam.Type {
+				case "integer":
+					val, parseErr := strconv.ParseInt(sentParam, 10, 0)
+					if parseErr != nil {
+						err = parseErr
+						return
+					}
+					outParams[key] = val
+					break
+				case "number":
+					val, parseErr := strconv.ParseFloat(sentParam, 32)
+					if parseErr != nil {
+						err = parseErr
+						return
+					}
+					outParams[key] = val
+					break
+
+				default:
+					outParams[key] = sentParam
+
 					break
 				}
 				// done with this particular key

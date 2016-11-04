@@ -1,15 +1,29 @@
 package dragonfruit
 
-import (
-	"net/url"
-)
+type qparam map[string]interface{}
+
+func (q qparam) Get(key string) interface{} {
+	val, ok := q[key]
+	if ok {
+		return val
+	}
+	out := ""
+	return out
+}
+
+func (q qparam) Del(key string) {
+	_, ok := q[key]
+	if ok {
+		delete(q, key)
+	}
+}
 
 // QueryParams are a container for http path, query and body information that's
 // used by the back-ends.
 type QueryParams struct {
 	Path        string
 	PathParams  map[string]interface{}
-	QueryParams url.Values
+	QueryParams qparam
 	Body        []byte
 }
 

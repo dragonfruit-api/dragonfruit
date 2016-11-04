@@ -3,11 +3,11 @@ package backend_couchdb
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/fjl/go-couchdb"
 	"github.com/ideo/dragonfruit"
 	"github.com/pborman/uuid"
 	"reflect"
-	"strconv"
 	"strings"
 )
 
@@ -479,7 +479,9 @@ func (d *Db_backend_couch) queryView(params dragonfruit.QueryParams) (int,
 
 	// if we found a view, query it
 	if viewExists {
+		fmt.Println(viewName, opts)
 		err = db.View("_design/core", viewName, &result, opts)
+		fmt.Println(result, err)
 	} else {
 		// if there is no view, use AllDocs
 		// this theoretically shouldn't happen
@@ -507,19 +509,14 @@ func setLimitAndOffset(params dragonfruit.QueryParams) (limit int64,
 	l := params.QueryParams.Get("limit")
 
 	if l != "" {
-		num, err := strconv.ParseInt(l, 10, 0)
-		if err == nil {
-			limit = num
-		}
+		limit = l.(int64)
 		params.QueryParams.Del("limit")
 	}
 
 	o := params.QueryParams.Get("offset")
 	if o != "" {
-		num, err := strconv.ParseInt(o, 10, 0)
-		if err == nil {
-			offset = num
-		}
+
+		offset = o.(int64)
 		params.QueryParams.Del("offset")
 	}
 
@@ -682,22 +679,71 @@ func (d *Db_backend_couch) findQueryView(params dragonfruit.QueryParams,
 	}
 
 	// iterate over the passed queryParams map
-	for queryParam, queryValue := range params.QueryParams {
-		isRange := strings.Contains(queryParam, "Range")
-		if isRange {
-			queryParam = strings.Replace(queryParam, "Range", "", -1)
-		}
-		_, exists := vd.Views[makeQueryViewName(queryParam)]
-		if exists {
-			if isRange {
-				opts["startKey"] = queryValue[0]
-				opts["endKey"] = queryValue[(len(queryValue) - 1)]
+	for queryParam, _ := range params.QueryParams {
+		var q string
+		var startKey interface{}
+		var endKey interface{}
+		var searchKey string
+		var searchValue interface{}
+		reverseSearch := false
+
+		rangeStart := strings.Contains(queryParam, dragonfruit.RANGESTART)
+		rangeEnd := strings.Contains(queryParam, dragonfruit.RANGEEND)
+
+		// ugh ...
+		// TODO - refactor so it's not embarassing...
+		if rangeStart {
+			q = strings.Replace(queryParam, dragonfruit.RANGESTART, "", -1)
+			startKey = params.QueryParams.Get(queryParam)
+			searchKey = q + dragonfruit.RANGEEND
+
+			searchValue = params.QueryParams.Get(searchKey)
+			strSearch, empty := searchValue.(string)
+
+			if empty && (len(strSearch) == 0) {
+				endKey = make(map[string]string)
 			} else {
-				opts["key"] = params.QueryParams.Get(queryParam)
+				endKey = searchValue
 			}
-			params.QueryParams.Del(queryParam)
-			return makeQueryViewName(queryParam), true
+
+		} else if rangeEnd {
+			q = strings.Replace(queryParam, dragonfruit.RANGEEND, "", -1)
+
+			searchKey = q + dragonfruit.RANGESTART
+
+			searchValue = params.QueryParams.Get(searchKey)
+			strSearch, empty := searchValue.(string)
+
+			if empty && (len(strSearch) == 0) {
+				startKey = params.QueryParams.Get(queryParam)
+				reverseSearch = true
+			} else {
+				endKey = params.QueryParams.Get(queryParam)
+				startKey = searchValue
+			}
+		} else {
+			q = queryParam
+		}
+
+		_, exists := vd.Views[makeQueryViewName(q)]
+		if exists {
+			if rangeEnd || rangeStart {
+				opts["startkey"] = startKey
+				opts["endkey"] = endKey
+				if reverseSearch {
+					opts["descending"] = true
+				}
+				fmt.Println(opts)
+				params.QueryParams.Del(queryParam)
+				params.QueryParams.Del(searchKey)
+			} else {
+				opts["key"] = params.QueryParams.Get(q)
+				params.QueryParams.Del(q)
+
+			}
+			return makeQueryViewName(q), true
 		}
 	}
 	return "", false
+
 }

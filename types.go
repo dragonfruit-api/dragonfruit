@@ -220,6 +220,7 @@ type Response struct {
 	Examples map[string]interface{} `json:"example,omitempty"`
 }
 
+// Describes a Swagger security scheme
 type SecurityScheme struct {
 	Type             string            `json:"type"`
 	Description      string            `json:"description,omitempty"`
