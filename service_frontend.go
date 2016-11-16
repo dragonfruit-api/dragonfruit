@@ -3,6 +3,8 @@ package dragonfruit
 import (
 	"encoding/json"
 
+	"errors"
+	"fmt"
 	"github.com/go-martini/martini"
 	"io/ioutil"
 	"net/http"
@@ -350,6 +352,13 @@ func coerceQueryParam(sentParams url.Values,
 
 				sentParam := sentParams.Get(key)
 
+				// this feels way too verbose...
+				inBound := checkBounds(apiParam, key, sentParam)
+				if inBound != nil {
+					err = inBound
+					return
+				}
+
 				switch apiParam.Type {
 				case "integer":
 					val, parseErr := strconv.ParseInt(sentParam, 10, 0)
@@ -357,6 +366,13 @@ func coerceQueryParam(sentParams url.Values,
 						err = parseErr
 						return
 					}
+
+					intEnumErr := checkIntEnum(apiParam, key, val)
+					if intEnumErr != nil {
+						err = intEnumErr
+						return
+					}
+
 					outParams[key] = val
 					break
 				case "number":
@@ -365,10 +381,22 @@ func coerceQueryParam(sentParams url.Values,
 						err = parseErr
 						return
 					}
+
+					floatEnumErr := checkFloatEnum(apiParam, key, val)
+					if floatEnumErr != nil {
+						err = floatEnumErr
+						return
+					}
+
 					outParams[key] = val
 					break
 
 				default:
+					strEnumErr := checkStrEnum(apiParam, key, sentParam)
+					if strEnumErr != nil {
+						err = strEnumErr
+						return
+					}
 					outParams[key] = sentParam
 
 					break
@@ -380,6 +408,91 @@ func coerceQueryParam(sentParams url.Values,
 	}
 
 	return
+
+}
+
+func checkStrEnum(apiParam *Parameter, paramName string, sentParam string) error {
+	if len(apiParam.Enum) == 0 {
+		return nil
+	}
+
+	sl := make([]string, 0, 0)
+
+	for _, v := range apiParam.Enum {
+		sl = append(sl, v.(string))
+		if sentParam == v.(string) {
+			return nil
+		}
+	}
+
+	strList := strings.Join(sl, ", ")
+	msg := fmt.Sprintf("The sent value %s was not found in the enumerated set %s.", paramName, strList)
+
+	return errors.New(msg)
+}
+
+func checkFloatEnum(apiParam *Parameter, paramName string, sentParam float64) error {
+	if len(apiParam.Enum) == 0 {
+		return nil
+	}
+
+	sl := make([]string, 0, 0)
+
+	for _, v := range apiParam.Enum {
+		sl = append(sl, v.(string))
+		if sentParam == v.(float64) {
+			return nil
+		}
+	}
+
+	strList := strings.Join(sl, ", ")
+	msg := fmt.Sprintf("The sent value %f was not found in the enumerated set %f.", paramName, strList)
+
+	return errors.New(msg)
+}
+
+func checkIntEnum(apiParam *Parameter, paramName string, sentParam int64) error {
+	if len(apiParam.Enum) == 0 {
+		return nil
+	}
+
+	sl := make([]string, 0, 0)
+
+	for _, v := range apiParam.Enum {
+		sl = append(sl, v.(string))
+		if sentParam == v.(int64) {
+			return nil
+		}
+	}
+
+	strList := strings.Join(sl, ", ")
+	msg := fmt.Sprintf("The sent value %f was not found in the enumerated set %f.", paramName, strList)
+
+	return errors.New(msg)
+}
+
+func checkBounds(apiParam *Parameter, paramName string, sentParam string) error {
+	if apiParam.Type != "integer" && apiParam.Type != "number" {
+		return nil
+	}
+
+	val, parseErr := strconv.ParseFloat(sentParam, 32)
+
+	if parseErr != nil {
+		return parseErr
+	}
+
+	if val > apiParam.Maximum {
+		msg := fmt.Sprintf("The parameter %s cannot be more than %f.  %s was sent.", paramName, apiParam.Maximum, sentParam)
+		return errors.New(msg)
+	}
+
+	if val < apiParam.Minimum {
+		msg := fmt.Sprintf("The parameter %s cannot be less than %f.  %s was sent.", paramName, apiParam.Minimum, sentParam)
+		return errors.New(msg)
+	}
+
+	return nil
 
 }
 

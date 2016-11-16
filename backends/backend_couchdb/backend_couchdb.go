@@ -3,7 +3,6 @@ package backend_couchdb
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/fjl/go-couchdb"
 	"github.com/ideo/dragonfruit"
 	"github.com/pborman/uuid"
@@ -479,9 +478,7 @@ func (d *Db_backend_couch) queryView(params dragonfruit.QueryParams) (int,
 
 	// if we found a view, query it
 	if viewExists {
-		fmt.Println(viewName, opts)
 		err = db.View("_design/core", viewName, &result, opts)
-		fmt.Println(result, err)
 	} else {
 		// if there is no view, use AllDocs
 		// this theoretically shouldn't happen
@@ -733,7 +730,6 @@ func (d *Db_backend_couch) findQueryView(params dragonfruit.QueryParams,
 				if reverseSearch {
 					opts["descending"] = true
 				}
-				fmt.Println(opts)
 				params.QueryParams.Del(queryParam)
 				params.QueryParams.Del(searchKey)
 			} else {
