@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/go-martini/martini"
 	"io/ioutil"
+	"math"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -353,10 +354,13 @@ func coerceQueryParam(sentParams url.Values,
 				sentParam := sentParams.Get(key)
 
 				// this feels way too verbose...
-				inBound := checkBounds(apiParam, key, sentParam)
-				if inBound != nil {
-					err = inBound
-					return
+				//fmt.Println(&apiParam.Minimum == nil, &apiParam.Maximum == nil, apiParam.Minimum, apiParam.Maximum)
+				if apiParam.Minimum != apiParam.Maximum {
+					inBound := checkBounds(apiParam, key, sentParam)
+					if inBound != nil {
+						err = inBound
+						return
+					}
 				}
 
 				switch apiParam.Type {
@@ -426,7 +430,7 @@ func checkStrEnum(apiParam *Parameter, paramName string, sentParam string) error
 	}
 
 	strList := strings.Join(sl, ", ")
-	msg := fmt.Sprintf("The sent value %s was not found in the enumerated set %s.", paramName, strList)
+	msg := fmt.Sprintf("You sent the value \"%s\" for the parameter \"%s\".  The sent parameter must be within the enumerated set [%s].", sentParam, paramName, strList)
 
 	return errors.New(msg)
 }
@@ -439,14 +443,15 @@ func checkFloatEnum(apiParam *Parameter, paramName string, sentParam float64) er
 	sl := make([]string, 0, 0)
 
 	for _, v := range apiParam.Enum {
-		sl = append(sl, v.(string))
+		st := strconv.FormatFloat(v.(float64), 'f', -1, 64)
+		sl = append(sl, st)
 		if sentParam == v.(float64) {
 			return nil
 		}
 	}
 
 	strList := strings.Join(sl, ", ")
-	msg := fmt.Sprintf("The sent value %f was not found in the enumerated set %f.", paramName, strList)
+	msg := fmt.Sprintf("You sent the value \"%f\" for the parameter \"%s\".  The sent parameter must be within the enumerated set [%s].", sentParam, paramName, strList)
 
 	return errors.New(msg)
 }
@@ -459,14 +464,15 @@ func checkIntEnum(apiParam *Parameter, paramName string, sentParam int64) error 
 	sl := make([]string, 0, 0)
 
 	for _, v := range apiParam.Enum {
-		sl = append(sl, v.(string))
-		if sentParam == v.(int64) {
+		st := strconv.FormatFloat(v.(float64), 'f', 0, 64)
+		sl = append(sl, st)
+		if sentParam == int64(v.(float64)) {
 			return nil
 		}
 	}
 
 	strList := strings.Join(sl, ", ")
-	msg := fmt.Sprintf("The sent value %f was not found in the enumerated set %f.", paramName, strList)
+	msg := fmt.Sprintf("You sent the value \"%d\" for the parameter \"%s\".  The sent parameter must be within the enumerated set [%s].", sentParam, paramName, strList)
 
 	return errors.New(msg)
 }
@@ -480,6 +486,20 @@ func checkBounds(apiParam *Parameter, paramName string, sentParam string) error 
 
 	if parseErr != nil {
 		return parseErr
+	}
+
+	if apiParam.Type == "integer" {
+		minFormat := int(math.Trunc(apiParam.Minimum))
+		maxFormat := int(math.Trunc(apiParam.Maximum))
+		if val > apiParam.Maximum {
+			msg := fmt.Sprintf("The parameter %s cannot be more than %d.  %s was sent.", paramName, maxFormat, sentParam)
+			return errors.New(msg)
+		}
+
+		if val < apiParam.Minimum {
+			msg := fmt.Sprintf("The parameter %s cannot be less than %d.  %s was sent.", paramName, minFormat, sentParam)
+			return errors.New(msg)
+		}
 	}
 
 	if val > apiParam.Maximum {
