@@ -19,7 +19,7 @@ const (
 
 // Decompose is the only exported function in this file.  It takes a set of
 // sample data, introspects it and converts it into a map of Swagger models.
-// It returns the model map and/or any errors.
+// It returns a schema map and any errors.
 func Decompose(sampledata []byte, baseType string, cnf Conf) (m map[string]*Schema, err error) {
 
 	var receiver interface{}
