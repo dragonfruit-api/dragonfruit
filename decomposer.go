@@ -15,6 +15,7 @@ const (
 	REFPREFIX   = "#/definitions/"
 	ENUMSPLIT   = "|"
 	MINMAXSPLIT = "<>"
+	METALIST    = "Metalist"
 )
 
 // Decompose is the only exported function in this file.  It takes a set of
@@ -30,7 +31,7 @@ func Decompose(sampledata []byte, baseType string, cnf Conf) (m map[string]*Sche
 
 	m = make(map[string]*Schema)
 	m[strings.Title(ContainerName)] = basecontainers[0]
-	m["Metalist"] = basecontainers[1]
+	m[METALIST] = basecontainers[1]
 
 	appendSubtype(baseType, m)
 

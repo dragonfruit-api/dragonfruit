@@ -33,8 +33,8 @@ type ContainerMeta struct {
 	ResponseMessage string `json:"responseMessage,omitempty"`
 	Offset          int    `json:"offset"`
 	Limit           int    `json:"limit,omitempty"`
-	Total           int    `json:"total,omitempty"`
-	Count           int    `json:"count,omitempty"`
+	Total           int    `json:"total"`
+	Count           int    `json:"count"`
 }
 
 // A container is a wrapper for a list of results, plus some meta information
@@ -58,7 +58,7 @@ type Db_backend interface {
 
 	// external API
 	// Query the datastore with a QueryParams struct
-	Query(QueryParams) (interface{}, error)
+	Query(QueryParams) (Container, error)
 
 	// Update a document using a QueryParams struct
 	Update(QueryParams, int) (interface{}, error)

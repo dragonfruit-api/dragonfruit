@@ -108,7 +108,7 @@ func MakeCommonAPIs(
 	individualApi.Get = makeSingleGetOperation(schemaName, upstreamParams, cnf)
 	individualApi.Put = makePutOperation(schemaName, schema, upstreamParams, cnf)
 	individualApi.Patch = makePatchOperation(schemaName, upstreamParams, cnf)
-	individualApi.Options = makeSingleOptionsOperation()
+	individualApi.Options = makeSingleOptionsOperation(upstreamParams)
 
 	out[individualPath] = individualApi
 
@@ -442,7 +442,7 @@ func makeCollectionOptionsOperation() (optOp *Operation) {
 
 // makeCollectionOptionsOperation returns the options on
 // a single url
-func makeSingleOptionsOperation() (optOp *Operation) {
+func makeSingleOptionsOperation(upstreamParams []*Parameter) (optOp *Operation) {
 	headers := make(map[string]*Items)
 
 	optOp = &Operation{}
@@ -459,6 +459,9 @@ func makeSingleOptionsOperation() (optOp *Operation) {
 		Description: "This url allows GET, PUT, PATCH and DELETE operations.",
 		Headers:     headers,
 	}
+
+	optOp.Parameters = append(optOp.Parameters, upstreamParams...)
+
 	return
 }
 

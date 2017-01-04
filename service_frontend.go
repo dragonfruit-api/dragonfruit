@@ -121,6 +121,8 @@ func addOperation(path string,
 	switch method {
 	case "GET":
 		m.Get(path, func(params martini.Params, req *http.Request, db Db_backend, res http.ResponseWriter) (int, string) {
+			isCollection := false
+
 			h := res.Header()
 			addHeaders(h, "Content-Type", produces)
 			addHeaders(h, "Accept", consumes)
@@ -142,6 +144,14 @@ func addOperation(path string,
 			}
 
 			path = strings.TrimPrefix(path, rd.BasePath)
+
+			pathcount := strings.Split(path, "/")
+			if (len(pathcount) % 2) == 0 {
+				isCollection = true
+			}
+
+			fmt.Println("pathcount: ", pathcount, path, len(pathcount), isCollection)
+
 			q := QueryParams{
 				Path:        path,
 				PathParams:  outParams,
@@ -149,15 +159,23 @@ func addOperation(path string,
 			}
 
 			result, err := db.Query(q)
+
 			if err != nil {
 				outerr, _ := json.Marshal(err.Error())
 				return 500, string(outerr)
 			}
+
 			out, err := json.Marshal(result)
 			if err != nil {
 				outerr, _ := json.Marshal(err.Error())
 				return 500, string(outerr)
 			}
+
+			if result.Meta.Count == 0 && (isCollection == false) {
+				notFoundError := errors.New("Entity not found.")
+				return 404, notFoundError.Error()
+			}
+
 			return 200, string(out)
 		})
 		break
@@ -167,6 +185,8 @@ func addOperation(path string,
 
 			addHeaders(h, "Content-Type", produces)
 			addHeaders(h, "Accept", consumes)
+			// TODO - validate post body.
+
 			val, err := ioutil.ReadAll(req.Body)
 
 			// coerce any required path parameters
@@ -188,7 +208,7 @@ func addOperation(path string,
 				return 500, string(outerr)
 			}
 			out, err := json.Marshal(doc)
-			return 200, string(out)
+			return 201, string(out)
 		})
 		break
 	case "PUT":
@@ -198,6 +218,7 @@ func addOperation(path string,
 			addHeaders(h, "Content-Type", produces)
 			addHeaders(h, "Accept", consumes)
 
+			// TODO - validate put bodies.
 			val, err := ioutil.ReadAll(req.Body)
 			outParams, err := coerceParam(params, op.Parameters)
 			if err != nil {

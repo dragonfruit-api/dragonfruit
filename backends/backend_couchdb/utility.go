@@ -28,7 +28,7 @@ func sanitizeDocInternal(doc reflect.Value) (reflect.Value, error) {
 		return doc, errors.New("invalid doc type")
 	case reflect.Interface:
 		return sanitizeDocInternal(doc.Elem())
-		break
+
 	case reflect.Map:
 
 		for _, key := range doc.MapKeys() {

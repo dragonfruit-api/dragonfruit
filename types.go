@@ -1,9 +1,5 @@
 package dragonfruit
 
-import (
-//"strings"
-)
-
 const (
 	ContainerName           = "container"
 	SwaggerResourceDB       = "swagger_docs"

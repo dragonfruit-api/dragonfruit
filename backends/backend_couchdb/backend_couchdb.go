@@ -119,7 +119,7 @@ func findSubDoc(pathslice [][]string,
 		switch bodyParams.Type().Kind() {
 		default:
 			return document, document, errors.New("Body Params must be a map.")
-			break
+
 		case reflect.Map:
 
 			var manipulator func(reflect.Value, reflect.Value) (reflect.Value, error)
@@ -412,10 +412,11 @@ func (d *Db_backend_couch) save(database string,
 }
 
 // Query queries a view and returns a result
-func (d *Db_backend_couch) Query(params dragonfruit.QueryParams) (interface{}, error) {
+func (d *Db_backend_couch) Query(params dragonfruit.QueryParams) (dragonfruit.Container, error) {
+
 	num, result, err := d.queryView(params)
 	if err != nil {
-		return nil, err
+		return dragonfruit.Container{}, err
 	}
 
 	returnType := makeTypeName(params.Path)
@@ -427,6 +428,7 @@ func (d *Db_backend_couch) Query(params dragonfruit.QueryParams) (interface{}, e
 	c.Meta.ResponseCode = 200
 	c.Meta.ResponseMessage = "Ok."
 	c.ContainerType = strings.Title(returnType + strings.Title(dragonfruit.ContainerName))
+	c.Results = make([]interface{}, 0)
 	for _, row := range result.Rows {
 		outRow, err := sanitizeDoc(row.Value)
 		if err != nil {
@@ -485,6 +487,7 @@ func (d *Db_backend_couch) queryView(params dragonfruit.QueryParams) (int,
 		opts["include_docs"] = true
 		err = db.AllDocs(&result, opts)
 	}
+	result.Offset = offset
 
 	totalResults := result.TotalRows
 
@@ -498,22 +501,22 @@ func (d *Db_backend_couch) queryView(params dragonfruit.QueryParams) (int,
 }
 
 // setLimitAndOffset parses limit and offset queries from a set of query params
-func setLimitAndOffset(params dragonfruit.QueryParams) (limit int64,
-	offset int64) {
+func setLimitAndOffset(params dragonfruit.QueryParams) (limit int,
+	offset int) {
 
 	limit, offset = 10, 0
 
 	l := params.QueryParams.Get("limit")
 
 	if l != "" {
-		limit = l.(int64)
+		limit = l.(int)
 		params.QueryParams.Del("limit")
 	}
 
 	o := params.QueryParams.Get("offset")
 	if o != "" {
 
-		offset = o.(int64)
+		offset = o.(int)
 		params.QueryParams.Del("offset")
 	}
 
@@ -526,7 +529,7 @@ func setLimitAndOffset(params dragonfruit.QueryParams) (limit int64,
 //
 // After a result set is returned from a view,
 func filterResultSet(result couchDbResponse, params dragonfruit.QueryParams,
-	limit int64, offset int64) (int, couchDbResponse, error) {
+	limit int, offset int) (int, couchDbResponse, error) {
 
 	if len(params.QueryParams) < 1 {
 		return len(result.Rows), result, nil
@@ -583,8 +586,8 @@ func (d *Db_backend_couch) load(database string, documentId string, doc interfac
 // a view was found at not.
 func (d *Db_backend_couch) pickView(params dragonfruit.QueryParams,
 	opts map[string]interface{},
-	limit int64,
-	offset int64) (string, bool) {
+	limit int,
+	offset int) (string, bool) {
 
 	viewName := makePathViewName(params.Path)
 
