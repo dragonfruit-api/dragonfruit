@@ -1,7 +1,6 @@
 package backend_couchdb
 
 import (
-	"fmt"
 	"github.com/gedex/inflector"
 	"github.com/ideo/dragonfruit"
 	"strings"
@@ -89,7 +88,6 @@ func (vd *viewDoc) makePathParamView(api *dragonfruit.PathItem,
 	tpath := dragonfruit.TranslatePath(path)
 	viewname := makePathViewName(tpath)
 
-	fmt.Println(matches, tpath, viewname)
 	if len(matches) == 1 {
 		// regex voodoo
 		paramName := matches[0][4]

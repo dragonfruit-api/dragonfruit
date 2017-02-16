@@ -131,8 +131,6 @@ func addOperation(path string,
 
 	consumes := append(rd.Consumes, op.Consumes...)
 
-	fmt.Println(method)
-
 	switch method {
 	case "GET":
 		m.Get(path, func(params martini.Params, req *http.Request, db Db_backend, res http.ResponseWriter) (int, string) {
@@ -165,8 +163,6 @@ func addOperation(path string,
 				isCollection = true
 			}
 
-			fmt.Println("pathcount: ", pathcount, path, len(pathcount), isCollection)
-
 			q := QueryParams{
 				Path:        path,
 				PathParams:  outParams,
@@ -185,7 +181,6 @@ func addOperation(path string,
 				outerr, _ := json.Marshal(err.Error())
 				return 500, string(outerr)
 			}
-			fmt.Println("result", result.Meta.Count)
 			if result.Meta.Count == 0 && (isCollection == false) {
 				notFoundError := errors.New("Entity not found.")
 				return 404, notFoundError.Error()
@@ -388,7 +383,6 @@ func coerceParam(sentParams martini.Params,
 				break
 			}
 		}
-		fmt.Println("present value", key, present)
 
 		if present == false {
 			return outParams, errors.New("The parameter " + key + " is not valid.")
@@ -416,7 +410,6 @@ func coerceQueryParam(sentParams url.Values,
 				sentParam := sentParams.Get(key)
 
 				// this feels way too verbose...
-				//fmt.Println(&apiParam.Minimum == nil, &apiParam.Maximum == nil, apiParam.Minimum, apiParam.Maximum)
 				if apiParam.Minimum != apiParam.Maximum {
 					inBound := checkBounds(apiParam, key, sentParam)
 					if inBound != nil {
@@ -471,7 +464,6 @@ func coerceQueryParam(sentParams url.Values,
 				break
 			}
 		}
-		fmt.Println("present value", key, present)
 
 		if present == false {
 			return outParams, errors.New("The parameter " + key + " is not valid.")
