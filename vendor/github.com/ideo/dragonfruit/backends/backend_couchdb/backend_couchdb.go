@@ -510,8 +510,6 @@ func (d *Db_backend_couch) queryView(params dragonfruit.QueryParams) (int,
 func setLimitAndOffset(params dragonfruit.QueryParams) (limit int,
 	offset int) {
 
-	fmt.Println("params", params)
-
 	limit, offset = 10, 0
 
 	l := params.QueryParams.Get("limit")
@@ -528,7 +526,6 @@ func setLimitAndOffset(params dragonfruit.QueryParams) (limit int,
 
 		params.QueryParams.Del("limit")
 	}
-	fmt.Println(l, limit)
 
 	o := params.QueryParams.Get("offset")
 	if o != "" {
@@ -542,7 +539,6 @@ func setLimitAndOffset(params dragonfruit.QueryParams) (limit int,
 		}
 		params.QueryParams.Del("offset")
 	}
-	fmt.Println(o, offset)
 
 	return
 }
