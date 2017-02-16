@@ -3,6 +3,7 @@ package backend_couchdb
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/fjl/go-couchdb"
 	"github.com/gedex/inflector"
 	"github.com/ideo/dragonfruit"
@@ -461,6 +462,8 @@ func (d *Db_backend_couch) queryView(params dragonfruit.QueryParams) (int,
 		err    error
 	)
 
+	fmt.Println(params)
+
 	limit, offset := setLimitAndOffset(params)
 
 	if limit < 1 {
@@ -507,21 +510,39 @@ func (d *Db_backend_couch) queryView(params dragonfruit.QueryParams) (int,
 func setLimitAndOffset(params dragonfruit.QueryParams) (limit int,
 	offset int) {
 
+	fmt.Println("params", params)
+
 	limit, offset = 10, 0
 
 	l := params.QueryParams.Get("limit")
 
 	if l != "" {
-		limit = l.(int)
+		switch l := l.(type) {
+		case int64:
+			fmt.Println(l, "is int 64")
+			limit = int(l)
+		case int:
+			fmt.Println(l, "is int")
+			limit = l
+		}
+
 		params.QueryParams.Del("limit")
 	}
+	fmt.Println(l, limit)
 
 	o := params.QueryParams.Get("offset")
 	if o != "" {
-
-		offset = o.(int)
+		switch o := o.(type) {
+		case int64:
+			fmt.Println(o, "is int 64")
+			offset = int(o)
+		case int:
+			fmt.Println(o, "is int")
+			offset = o
+		}
 		params.QueryParams.Del("offset")
 	}
+	fmt.Println(o, offset)
 
 	return
 }
