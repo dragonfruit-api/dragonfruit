@@ -16,14 +16,15 @@ import (
 )
 
 var (
-	PathRe      *regexp.Regexp
-	ReqPathRe   *regexp.Regexp
-	GetDbRe     *regexp.Regexp
-	ViewPathRe  *regexp.Regexp
-	PathParamRe *regexp.Regexp
-	EndOfPathRe *regexp.Regexp
-	PostPathRe  *regexp.Regexp
-	m           *martini.ClassicMartini
+	PathRe          *regexp.Regexp
+	ReqPathRe       *regexp.Regexp
+	GetDbRe         *regexp.Regexp
+	ViewPathRe      *regexp.Regexp
+	ViewPathParamRe *regexp.Regexp
+	PathParamRe     *regexp.Regexp
+	EndOfPathRe     *regexp.Regexp
+	PostPathRe      *regexp.Regexp
+	m               *martini.ClassicMartini
 )
 
 const (
@@ -34,14 +35,25 @@ const (
 	DELETE
 )
 
+const (
+	NOTFOUNDERROR = "Entity not found."
+)
+
 // init sets up some basic regular expressions used by the frontend and
 // builds the base Martini instance.
 func init() {
+	// there are too many of these and they are confusing...
 	PathRe = regexp.MustCompile("(/([[:word:]]*)/({([[:word:]]*)}))")
 	ReqPathRe = regexp.MustCompile("(/([[:word:]]*)/([[:word:]]*))")
+
+	// pull the initial segment out of the path
 	GetDbRe = regexp.MustCompile("^/([[:word:]]*)/?")
+
 	// translates Martini paths
 	PathParamRe = regexp.MustCompile("(/([[:word:]]*)(/:[[:word:]]*)?)")
+
+	// used by the couch backend ...
+	ViewPathParamRe = regexp.MustCompile("/([[:word:]]*)(/:([[:word:]]*))?")
 	ViewPathRe = regexp.MustCompile("(/([[:word:]]*)(/{[[:word:]]*})?)")
 	EndOfPathRe = regexp.MustCompile("[^/]+$")
 	m = martini.Classic()
@@ -88,6 +100,7 @@ func NewApiFromSpec(path string, pathitem *PathItem, rd *Swagger, m *martini.Cla
 		"DELETE":  pathitem.Delete,
 		"GET":     pathitem.Get,
 		"HEAD":    pathitem.Head,
+		"PATCH":   pathitem.Patch,
 		"OPTIONS": pathitem.Options,
 		"PUT":     pathitem.Put,
 		"POST":    pathitem.Post,
@@ -117,6 +130,8 @@ func addOperation(path string,
 	produces := append(rd.Produces, op.Produces...)
 
 	consumes := append(rd.Consumes, op.Consumes...)
+
+	fmt.Println(method)
 
 	switch method {
 	case "GET":
@@ -170,7 +185,7 @@ func addOperation(path string,
 				outerr, _ := json.Marshal(err.Error())
 				return 500, string(outerr)
 			}
-
+			fmt.Println("result", result.Meta.Count)
 			if result.Meta.Count == 0 && (isCollection == false) {
 				notFoundError := errors.New("Entity not found.")
 				return 404, notFoundError.Error()
@@ -234,6 +249,11 @@ func addOperation(path string,
 			}
 
 			doc, err := db.Update(q, PUT)
+
+			if err.Error() == NOTFOUNDERROR {
+				return 404, string(err.Error())
+			}
+
 			if err != nil {
 				outerr, _ := json.Marshal(err.Error())
 				return 500, string(outerr)
@@ -263,6 +283,11 @@ func addOperation(path string,
 			}
 
 			doc, err := db.Update(q, PATCH)
+
+			if err.Error() == NOTFOUNDERROR {
+				return 404, string(err.Error())
+			}
+
 			if err != nil {
 				outerr, _ := json.Marshal(err.Error())
 				return 500, string(outerr)
@@ -289,7 +314,13 @@ func addOperation(path string,
 				PathParams: outParams,
 			}
 			err = db.Remove(q)
+
+			if err != nil && err.Error() == NOTFOUNDERROR {
+				return 404, string(err.Error())
+			}
+
 			if err != nil {
+				fmt.Println(err)
 				outerr, _ := json.Marshal(err.Error())
 				return 500, string(outerr)
 			}
@@ -324,9 +355,13 @@ func coerceParam(sentParams martini.Params,
 	// and here is where we wish Golang had functional-style
 	// list manipulation stuff
 	for key, sentParam := range sentParams {
+		present := false
+
 		for _, apiParam := range apiPathParams {
 
 			if key == apiParam.Name {
+				present = true
+
 				switch apiParam.Type {
 				case "integer":
 					val, parseErr := strconv.ParseInt(sentParam, 10, 0)
@@ -353,6 +388,11 @@ func coerceParam(sentParams martini.Params,
 				break
 			}
 		}
+		fmt.Println("present value", key, present)
+
+		if present == false {
+			return outParams, errors.New("The parameter " + key + " is not valid.")
+		}
 	}
 
 	return
@@ -368,10 +408,11 @@ func coerceQueryParam(sentParams url.Values,
 	outParams = make(map[string]interface{})
 
 	for key, _ := range sentParams {
+		present := false
 		for _, apiParam := range apiPathParams {
 
 			if key == apiParam.Name {
-
+				present = true
 				sentParam := sentParams.Get(key)
 
 				// this feels way too verbose...
@@ -429,6 +470,11 @@ func coerceQueryParam(sentParams url.Values,
 				// done with this particular key
 				break
 			}
+		}
+		fmt.Println("present value", key, present)
+
+		if present == false {
+			return outParams, errors.New("The parameter " + key + " is not valid.")
 		}
 	}
 

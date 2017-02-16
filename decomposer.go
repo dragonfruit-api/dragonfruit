@@ -139,7 +139,7 @@ func buildProperty(propName string,
 		prop.buildSliceProperty(inflector.Singularize(propName), iref, sanitized, models)
 
 		// always pluralize array stuff
-		pname := inflector.Pluralize(inflector.Singularize(propName))
+		pname := inflector.Singularize(propName)
 		models[modelName].Properties[pname] = prop
 		break
 

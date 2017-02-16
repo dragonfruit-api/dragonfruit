@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/fjl/go-couchdb"
+	"github.com/gedex/inflector"
 	"github.com/ideo/dragonfruit"
 	"github.com/pborman/uuid"
 	"reflect"
@@ -21,11 +22,11 @@ const (
 // document.
 func findPropertyFromPath(model string, path string,
 	resource *dragonfruit.Swagger) (string, *dragonfruit.Schema) {
-
+	p := strings.ToLower(inflector.Singularize(path))
 	m, ok := resource.Definitions[model]
 	if ok {
 		for k, v := range m.Properties {
-			if strings.ToLower(k) == strings.ToLower(path) {
+			if strings.ToLower(k) == p {
 				return k, v
 			}
 		}
@@ -222,13 +223,14 @@ func findSubDoc(pathslice [][]string,
 
 func (d *Db_backend_couch) getRootDocument(params dragonfruit.QueryParams) (couchdbRow, string, error) {
 
-	viewpath := dragonfruit.PathRe.FindAllStringSubmatch(params.Path, -1)
-
+	viewpath := dragonfruit.ViewPathParamRe.FindAllStringSubmatch(params.Path, -1)
 	// take the first segment from the update path
 	newPath := viewpath[0][0]
 
+	// make a new
 	newPathParams := make(map[string]interface{})
-	newPathParams[viewpath[0][4]] = params.PathParams[viewpath[0][4]]
+	// extract
+	newPathParams[viewpath[0][3]] = params.PathParams[viewpath[0][3]]
 
 	newparams := dragonfruit.QueryParams{
 		Path:       newPath,
@@ -240,7 +242,7 @@ func (d *Db_backend_couch) getRootDocument(params dragonfruit.QueryParams) (couc
 		return couchdbRow{}, "", err
 	}
 	if len(result.Rows) == 0 {
-		return couchdbRow{}, "", errors.New("not found error")
+		return couchdbRow{}, "", errors.New(dragonfruit.NOTFOUNDERROR)
 	}
 
 	row := result.Rows[0]
@@ -292,7 +294,8 @@ func (d *Db_backend_couch) Insert(params dragonfruit.QueryParams) (interface{},
 	// if there are no path parameters, this is a new primary document
 	// just save it
 	if len(params.PathParams) == 0 {
-		_, doc, err = d.save(database, uuid.New(), document)
+		docId := uuid.New()
+		_, doc, err = d.save(database, docId, document)
 	} else {
 		pathmap, couchdoc, id, newDoc, err := d.getPathSpecificStuff(params)
 		if err != nil {
@@ -350,7 +353,7 @@ func (d *Db_backend_couch) Remove(params dragonfruit.QueryParams) error {
 		}
 
 		if len(result.Rows) == 0 {
-			return errors.New("not found error")
+			return errors.New(dragonfruit.NOTFOUNDERROR)
 		}
 
 		target := result.Rows[0]
@@ -623,6 +626,7 @@ func (d *Db_backend_couch) pickView(params dragonfruit.QueryParams,
 	}
 
 	viewMatches := dragonfruit.PathParamRe.FindAllStringSubmatch(params.Path, -1)
+	// for
 	// use a non-array key
 	if (len(params.PathParams) == 1) && (len(viewMatches) == 1) {
 		// ugh i know...
@@ -642,11 +646,14 @@ func (d *Db_backend_couch) pickView(params dragonfruit.QueryParams,
 	}
 
 	key := make([]interface{}, 0)
-	for _, param := range params.PathParams {
+	pathOrder := dragonfruit.ViewPathParamRe.FindAllStringSubmatch(params.Path, -1)
+	for _, pathElement := range pathOrder {
+		if pathElement[3] != "" {
+			param := params.PathParams[pathElement[3]]
+			key = append(key, param)
+		}
 
-		key = append(key, param)
 	}
-
 	if ok {
 		opts["key"] = key
 	} else {
