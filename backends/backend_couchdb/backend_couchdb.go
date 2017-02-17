@@ -517,10 +517,8 @@ func setLimitAndOffset(params dragonfruit.QueryParams) (limit int,
 	if l != "" {
 		switch l := l.(type) {
 		case int64:
-			fmt.Println(l, "is int 64")
 			limit = int(l)
 		case int:
-			fmt.Println(l, "is int")
 			limit = l
 		}
 
@@ -531,10 +529,8 @@ func setLimitAndOffset(params dragonfruit.QueryParams) (limit int,
 	if o != "" {
 		switch o := o.(type) {
 		case int64:
-			fmt.Println(o, "is int 64")
 			offset = int(o)
 		case int:
-			fmt.Println(o, "is int")
 			offset = o
 		}
 		params.QueryParams.Del("offset")
