@@ -36,10 +36,10 @@ func (d *Db_backend_couch) Prep(database string,
 
 	// well this is ugly...
 	for path, api := range resource.Paths {
-
-		vd.makePathParamView(api, path, api.Get, resource)
-		vd.makeQueryParamView(api, api.Get, resource)
-
+		if strings.HasPrefix(path, "/"+database) {
+			vd.makePathParamView(api, path, api.Get, resource)
+			vd.makeQueryParamView(api, api.Get, resource)
+		}
 	}
 	d.save(database, id, vd)
 	return nil
@@ -69,7 +69,7 @@ func (vd *viewDoc) makeQueryParamView(
 					if prop.Type != "array" {
 						viewname := makeQueryViewName(param.Name)
 						vw := view{}
-						vw.MapFunc = "function(doc){ emit(doc." + propname + ",doc); }"
+						vw.MapFunc = "function(doc){ emit(doc." + propname + ", doc); }"
 						vd.add(viewname, vw)
 					}
 				}
@@ -93,7 +93,7 @@ func (vd *viewDoc) makePathParamView(api *dragonfruit.PathItem,
 		paramName := matches[0][4]
 		//pathName := matches[0][2]
 		vw := view{}
-		vw.MapFunc = "function(doc){ emit(doc." + paramName + ",doc); }"
+		vw.MapFunc = "function(doc){ emit(doc." + paramName + ", doc); }"
 		vd.add(viewname, vw)
 	}
 	if len(matches) > 1 {

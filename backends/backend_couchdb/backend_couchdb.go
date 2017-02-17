@@ -462,8 +462,6 @@ func (d *Db_backend_couch) queryView(params dragonfruit.QueryParams) (int,
 		err    error
 	)
 
-	fmt.Println(params)
-
 	limit, offset := setLimitAndOffset(params)
 
 	if limit < 1 {
