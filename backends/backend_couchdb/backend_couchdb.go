@@ -3,7 +3,6 @@ package backend_couchdb
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/fjl/go-couchdb"
 	"github.com/gedex/inflector"
 	"github.com/ideo/dragonfruit"
