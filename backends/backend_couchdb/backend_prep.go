@@ -1,7 +1,6 @@
 package backend_couchdb
 
 import (
-	"fmt"
 	"github.com/gedex/inflector"
 	"github.com/ideo/dragonfruit"
 	"strings"
