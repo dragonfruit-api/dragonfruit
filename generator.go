@@ -130,11 +130,11 @@ func makeSubApis(
 ) map[string]*PathItem {
 
 	out := make(map[string]*PathItem)
-	for _, propSchema := range schema.Properties {
+
+	for propertyName, propSchema := range schema.Properties {
 		if (propSchema.Type == "array") && (propSchema.Items.Ref != "") {
 			subModelName := DeRef(propSchema.Items.Ref)
-			st := inflector.Pluralize(inflector.Singularize(subModelName))
-			resourceroot := strings.ToLower(st)
+			resourceroot := inflector.Pluralize(inflector.Singularize(propertyName))
 			commonApis := MakeCommonAPIs(prefix, resourceroot, subModelName,
 				schemaMap, upstreamParams, cnf)
 

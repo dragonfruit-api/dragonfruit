@@ -8,6 +8,7 @@ import (
 	"github.com/ideo/dragonfruit"
 	"github.com/pborman/uuid"
 	"reflect"
+	"strconv"
 	"strings"
 )
 
@@ -59,7 +60,7 @@ func (d *Db_backend_couch) getPathSpecificStuff(params dragonfruit.QueryParams) 
 	couchdbRow, string, interface{}, error) {
 	var v interface{}
 
-	pathmap := dragonfruit.PathRe.FindAllStringSubmatch(params.Path, -1)
+	pathmap := dragonfruit.PathParamRe.FindAllStringSubmatch(params.Path, -1)
 
 	doc, id, err := d.getRootDocument(params)
 
@@ -95,12 +96,12 @@ func (d *Db_backend_couch) Update(params dragonfruit.QueryParams, operation int)
 		reflect.ValueOf(doc.Value),
 		reflect.ValueOf(v),
 		operation)
+
 	database := getDatabaseName(params)
 	_, out, err := d.save(database, id, newdoc.Interface())
 	if err != nil {
 		return out, err
 	}
-
 	out, err = sanitizeDoc(partial.Interface())
 
 	return out, err
@@ -135,11 +136,12 @@ func findSubDoc(pathslice [][]string,
 		}
 
 	} else {
-		var currKey string
+		var currKey reflect.Value
 		var currItem reflect.Value
 		if len(pathslice) > 0 {
-			currKey = pathslice[0][4]
-			currItem = reflect.ValueOf(pathslice[0][2])
+
+			currKey = reflect.ValueOf(pathslice[0][4])
+			currItem = reflect.ValueOf(inflector.Singularize(pathslice[0][2]))
 		} else {
 			endOfPath := dragonfruit.EndOfPathRe.FindStringSubmatch(params.Path)
 			currItem = reflect.ValueOf(endOfPath[0])
@@ -159,7 +161,6 @@ func findSubDoc(pathslice [][]string,
 			partial = part
 			break
 		case reflect.Map:
-
 			newdoc, part, err := findSubDoc(pathslice, params, document.MapIndex(currItem), bodyParams, operation)
 			if err != nil {
 				return document, part, err
@@ -171,7 +172,7 @@ func findSubDoc(pathslice [][]string,
 			// the cyclomatic complexity is too damn high...
 
 			// for posts, add an element to the slice
-			if (operation == dragonfruit.POST) && (len(pathslice) == 0) {
+			if (operation == dragonfruit.POST) && (len(pathslice) == 1) {
 				newDoc := reflect.Append(document, bodyParams)
 				return newDoc, bodyParams, nil
 			}
@@ -186,9 +187,8 @@ func findSubDoc(pathslice [][]string,
 				default:
 					break
 				case reflect.Map:
-					vo := reflect.ValueOf(currKey)
-					if d.MapIndex(vo).Elem().String() == params.PathParams[currKey] {
 
+					if matchInterfaceKeys(d.MapIndex(currKey).Elem(), params.PathParams[currKey.String()]) {
 						if operation == dragonfruit.DELETE {
 							if i == 0 {
 								document = document.Slice(1, document.Len())
@@ -603,7 +603,6 @@ func (d *Db_backend_couch) pickView(params dragonfruit.QueryParams,
 	offset int) (string, bool) {
 
 	viewName := makePathViewName(params.Path)
-
 	// if there's no query parameters to filter, you can go
 	// ahead and use the passed limit and offset
 	// and apply it during the query to the view
@@ -762,4 +761,30 @@ func (d *Db_backend_couch) findQueryView(params dragonfruit.QueryParams,
 	}
 	return "", false
 
+}
+
+func matchInterfaceKeys(needle reflect.Value, haystack interface{}) bool {
+	switch t := haystack.(type) {
+	case string:
+		return needle.String() == t
+	case int64:
+		switch needle.Kind() {
+		case reflect.Int:
+			return needle.Int() == t
+		case reflect.String:
+			st := needle.String()
+			outst, err := strconv.ParseInt(st, 10, 64)
+			if err != nil {
+				return false
+			}
+			return outst == t
+		case reflect.Float32:
+		case reflect.Float64:
+			ft := needle.Float()
+			return int64(ft) == t
+
+		}
+
+	}
+	return false
 }

@@ -17,6 +17,7 @@ import (
 
 var (
 	PathRe          *regexp.Regexp
+	TerminalPath    *regexp.Regexp
 	ReqPathRe       *regexp.Regexp
 	GetDbRe         *regexp.Regexp
 	ViewPathRe      *regexp.Regexp
@@ -43,14 +44,19 @@ const (
 // builds the base Martini instance.
 func init() {
 	// there are too many of these and they are confusing...
-	PathRe = regexp.MustCompile("(/([[:word:]]*)/({([[:word:]]*)}))")
+
+	// looks for paths terminating with {params}
+	PathRe = regexp.MustCompile("(/([[:word:]]+)/({([[:word:]]+)}){1})")
+
+	// paths terminating with a param
+	TerminalPath = regexp.MustCompile("{[[:word:]]+}$")
 	ReqPathRe = regexp.MustCompile("(/([[:word:]]*)/([[:word:]]*))")
 
 	// pull the initial segment out of the path
 	GetDbRe = regexp.MustCompile("^/([[:word:]]*)/?")
 
 	// translates Martini paths
-	PathParamRe = regexp.MustCompile("(/([[:word:]]*)(/:[[:word:]]*)?)")
+	PathParamRe = regexp.MustCompile("(/([[:word:]]*)(/:([[:word:]]*))?)")
 
 	// used by the couch backend ...
 	ViewPathParamRe = regexp.MustCompile("/([[:word:]]*)(/:([[:word:]]*))?")
@@ -245,11 +251,11 @@ func addOperation(path string,
 
 			doc, err := db.Update(q, PUT)
 
-			if err.Error() == NOTFOUNDERROR {
-				return 404, string(err.Error())
-			}
-
 			if err != nil {
+				if err.Error() == NOTFOUNDERROR {
+					return 404, string(err.Error())
+				}
+
 				outerr, _ := json.Marshal(err.Error())
 				return 500, string(outerr)
 			}
@@ -315,7 +321,6 @@ func addOperation(path string,
 			}
 
 			if err != nil {
-				fmt.Println(err)
 				outerr, _ := json.Marshal(err.Error())
 				return 500, string(outerr)
 			}
