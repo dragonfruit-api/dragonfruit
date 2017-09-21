@@ -159,7 +159,7 @@ type Parameter struct {
 	Name             string        `json:"name"`
 	In               string        `json:"in"`
 	Description      string        `json:"description,omitempty"`
-	Required         bool          `json:"required,omitempty"`
+	Required         bool          `json:"required"`
 	Schema           *Schema       `json:"schema,omitempty"`
 	Type             string        `json:"type,omitempty"`
 	Format           string        `json:"format,omitempty"`

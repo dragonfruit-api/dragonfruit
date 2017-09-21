@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/go-martini/martini"
+	"github.com/martini-contrib/cors"
 	"io/ioutil"
 	"math"
 	"net/http"
@@ -63,6 +64,11 @@ func init() {
 	ViewPathRe = regexp.MustCompile("(/([[:word:]]*)(/{[[:word:]]*})?)")
 	EndOfPathRe = regexp.MustCompile("[^/]+$")
 	m = martini.Classic()
+	m.Use(cors.Allow(&cors.Options{
+		AllowOrigins: []string{"*"},
+		AllowMethods: []string{"PUT", "PATCH", "POST", "GET", "OPTIONS", "DELETE"},
+		AllowHeaders: []string{"Origin", "Expires", "Cache-Control", "X-Requested-With", "Content-Type"},
+	}))
 }
 
 // GetMartiniInstance returns a Martini instance (so that it can be used by

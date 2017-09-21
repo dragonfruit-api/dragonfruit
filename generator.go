@@ -503,27 +503,30 @@ func makeArrayParams(propName string, schema *Schema) (p []*Parameter) {
 func makeNumParams(propName string, schema *Schema) (p []*Parameter) {
 	p = make([]*Parameter, 0, 0)
 	pr := &Parameter{
-		Type:    schema.Type,
-		Minimum: schema.Minimum,
-		Maximum: schema.Maximum,
-		Format:  schema.Format,
-		In:      "query",
-		Name:    propName,
+		Type:     schema.Type,
+		Minimum:  schema.Minimum,
+		Maximum:  schema.Maximum,
+		Format:   schema.Format,
+		In:       "query",
+		Name:     propName,
+		Required: false,
 	}
 
 	if len(schema.Enum) == 0 {
 		rangeStartField := &Parameter{
-			Type:   schema.Type,
-			In:     "query",
-			Format: schema.Format,
-			Name:   propName + RANGESTART,
+			Type:     schema.Type,
+			In:       "query",
+			Format:   schema.Format,
+			Name:     propName + RANGESTART,
+			Required: false,
 		}
 		p = append(p, rangeStartField)
 		rangeEndField := &Parameter{
-			Type:   schema.Type,
-			In:     "query",
-			Format: schema.Format,
-			Name:   propName + RANGEEND,
+			Type:     schema.Type,
+			In:       "query",
+			Format:   schema.Format,
+			Name:     propName + RANGEEND,
+			Required: false,
 		}
 		p = append(p, rangeEndField)
 	} else {
