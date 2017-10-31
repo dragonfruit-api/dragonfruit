@@ -1,8 +1,8 @@
 package backend_couchdb
 
 import (
+	"github.com/dragonfruit-api/dragonfruit"
 	"github.com/gedex/inflector"
-	"github.com/ideo/dragonfruit"
 	"strings"
 )
 

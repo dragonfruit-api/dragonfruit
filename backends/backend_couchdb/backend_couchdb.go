@@ -3,13 +3,15 @@ package backend_couchdb
 import (
 	"encoding/json"
 	"errors"
-	"github.com/fjl/go-couchdb"
-	"github.com/gedex/inflector"
-	"github.com/ideo/dragonfruit"
-	"github.com/pborman/uuid"
 	"reflect"
 	"strconv"
 	"strings"
+
+	"github.com/dragonfruit-api/dragonfruit"
+
+	"github.com/fjl/go-couchdb"
+	"github.com/gedex/inflector"
+	"github.com/pborman/uuid"
 )
 
 const (
