@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/dragonfruit-api/dragonfruit"
-	"github.com/gedex/inflector"
 	"os/exec"
 	"reflect"
 	"strings"
 	"time"
+
+	"github.com/dragonfruit-api/dragonfruit"
+	"github.com/gedex/inflector"
 )
 
 // sanitizeDoc removes _id and _rev keys from the document map

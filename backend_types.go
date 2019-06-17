@@ -37,7 +37,7 @@ type ContainerMeta struct {
 	Count           int    `json:"count"`
 }
 
-// A container is a wrapper for a list of results, plus some meta information
+// A Container is a wrapper for a list of results, plus some meta information
 // about the result set.
 type Container struct {
 	Meta          ContainerMeta `json:"meta,omitempty"`

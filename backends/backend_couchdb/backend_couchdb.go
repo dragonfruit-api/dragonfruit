@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/dragonfruit-api/dragonfruit"
-
 	"github.com/fjl/go-couchdb"
+
 	"github.com/gedex/inflector"
 	"github.com/pborman/uuid"
 )

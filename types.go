@@ -94,7 +94,7 @@ type Schema struct {
 	ExclusiveMinimum bool          `json:"exclusiveMinimum,omitempty"`
 	MaxLength        int           `json:"maxLength,omitempty"`
 	MinLength        int           `json:"minLength,omitempty"`
-	Pattern          string        `json:"minLength,omitempty"`
+	Pattern          string        `json:"pattern,omitempty"`
 	MaxItems         int           `json:"maxitems,omitempty"`
 	MinItems         int           `json:"minitems,omitempty"`
 	UniqueItems      bool          `json:"uniqueItems,omitempty"`
@@ -173,7 +173,7 @@ type Parameter struct {
 	ExclusiveMinimum bool          `json:"exclusiveMinimum,omitempty"`
 	MaxLength        int           `json:"maxLength,omitempty"`
 	MinLength        int           `json:"minLength,omitempty"`
-	Pattern          string        `json:"minLength,omitempty"`
+	Pattern          string        `json:"pattern,omitempty"`
 	MaxItems         int           `json:"maxitems,omitempty"`
 	MinItems         int           `json:"minitems,omitempty"`
 	UniqueItems      bool          `json:"uniqueItems,omitempty"`
@@ -196,7 +196,7 @@ type Items struct {
 	ExclusiveMinimum bool          `json:"exclusiveMinimum,omitempty"`
 	MaxLength        int           `json:"maxLength,omitempty"`
 	MinLength        int           `json:"minLength,omitempty"`
-	Pattern          string        `json:"minLength,omitempty"`
+	Pattern          string        `json:"pattern,omitempty"`
 	MaxItems         int           `json:"maxitems,omitempty"`
 	MinItems         int           `json:"minitems,omitempty"`
 	UniqueItems      bool          `json:"uniqueItems,omitempty"`

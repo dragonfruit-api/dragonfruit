@@ -1,9 +1,10 @@
 package backend_couchdb
 
 import (
+	"strings"
+
 	"github.com/dragonfruit-api/dragonfruit"
 	"github.com/gedex/inflector"
-	"strings"
 )
 
 // Prep prepares a database to accept API data.

@@ -1,8 +1,9 @@
 package dragonfruit
 
 import (
-	"github.com/gedex/inflector"
 	"strings"
+
+	"github.com/gedex/inflector"
 )
 
 const (
@@ -26,7 +27,7 @@ func RegisterType(d Db_backend, byt []byte, cnf Conf, resourceType string, path 
 
 	modelMap, maperr := Decompose(byt, resourceType, cnf)
 
-	if err != nil {
+	if maperr != nil {
 		return maperr
 	}
 
@@ -46,21 +47,12 @@ func RegisterType(d Db_backend, byt []byte, cnf Conf, resourceType string, path 
 		sw.Paths[k] = v
 	}
 
-	d.SaveDefinition(sw)
+	err = d.SaveDefinition(sw)
 	preperror := d.Prep(path, sw)
 	if preperror != nil {
 		return preperror
 	}
 	return err
-}
-
-// getCommonResponseCodes loads a set of response codes that most of the APIs
-// return.
-func getCommonResponseCodes(cnf Conf, typ string) map[string]*Response {
-	if typ == "collection" {
-		return cnf.CommonCollectionResponses
-	}
-	return cnf.CommonSingleResponses
 }
 
 // getCommonGetParams loads a set of common params that should be added to
@@ -391,23 +383,23 @@ func makeCollectionOperation(schemaName string, schema *Schema,
 		case "string":
 			params := makeStringParams(propName, prop)
 			getOp.Parameters = append(getOp.Parameters, params...)
-			break
+
 		// arrays query against their type
 		case "array":
 			if prop.Items.Type != "" {
 				param := makeArrayParams(propName, prop)
 				getOp.Parameters = append(getOp.Parameters, param...)
 			}
-			break
+
 		// ints and numbers...
 		case "number":
 			params := makeNumParams(propName, prop)
 			getOp.Parameters = append(getOp.Parameters, params...)
-			break
+
 		case "integer":
 			params := makeNumParams(propName, prop)
 			getOp.Parameters = append(getOp.Parameters, params...)
-			break
+
 		// anything else (bools)
 		default:
 			param := makeGenParams(propName, prop)
@@ -501,7 +493,7 @@ func makeArrayParams(propName string, schema *Schema) (p []*Parameter) {
 // makeNumParam makes query parameters for numerical values.  If the
 // property does NOT have an enum property, a range query is defined.
 func makeNumParams(propName string, schema *Schema) (p []*Parameter) {
-	p = make([]*Parameter, 0, 0)
+	p = make([]*Parameter, 0)
 	pr := &Parameter{
 		Type:     schema.Type,
 		Minimum:  schema.Minimum,
