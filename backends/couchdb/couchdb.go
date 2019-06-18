@@ -1,4 +1,4 @@
-package backend_couchdb
+package couchdb
 
 import (
 	"encoding/json"
@@ -98,6 +98,9 @@ func (d *Db_backend_couch) Update(params dragonfruit.QueryParams, operation int)
 		reflect.ValueOf(doc.Value),
 		reflect.ValueOf(v),
 		operation)
+	if err != nil {
+		return nil, err
+	}
 
 	database := getDatabaseName(params)
 	_, out, err := d.save(database, id, newdoc.Interface())
@@ -122,7 +125,7 @@ func findSubDoc(pathslice [][]string,
 	if len(pathslice) == 0 && (operation == dragonfruit.PUT || operation == dragonfruit.PATCH) {
 		switch bodyParams.Type().Kind() {
 		default:
-			return document, document, errors.New("Body Params must be a map.")
+			return document, document, errors.New("body params must be a map")
 
 		case reflect.Map:
 
@@ -161,7 +164,6 @@ func findSubDoc(pathslice [][]string,
 			}
 			document = newdoc
 			partial = part
-			break
 		case reflect.Map:
 			newdoc, part, err := findSubDoc(pathslice, params, document.MapIndex(currItem), bodyParams, operation)
 			if err != nil {
@@ -169,7 +171,6 @@ func findSubDoc(pathslice [][]string,
 			}
 			document.SetMapIndex(currItem, newdoc)
 			partial = part
-			break
 		case reflect.Slice:
 			// the cyclomatic complexity is too damn high...
 
@@ -214,7 +215,6 @@ func findSubDoc(pathslice [][]string,
 				}
 
 			}
-			break
 
 		}
 
@@ -296,8 +296,8 @@ func (d *Db_backend_couch) Insert(params dragonfruit.QueryParams) (interface{},
 	// if there are no path parameters, this is a new primary document
 	// just save it
 	if len(params.PathParams) == 0 {
-		docId := uuid.New()
-		_, doc, err = d.save(database, docId, document)
+		docID := uuid.New()
+		_, doc, err = d.save(database, docID, document)
 	} else {
 		pathmap, couchdoc, id, newDoc, err := d.getPathSpecificStuff(params)
 		if err != nil {
@@ -308,7 +308,13 @@ func (d *Db_backend_couch) Insert(params dragonfruit.QueryParams) (interface{},
 			reflect.ValueOf(couchdoc.Value),
 			reflect.ValueOf(newDoc),
 			dragonfruit.POST)
+		if err != nil {
+			return nil, err
+		}
 		_, _, err = d.save(database, id, docVal.Interface())
+		if err != nil {
+			return nil, err
+		}
 		doc = partialVal.Interface()
 	}
 
@@ -365,6 +371,10 @@ func (d *Db_backend_couch) Remove(params dragonfruit.QueryParams) error {
 			return err
 		}
 		rev, err := d.client.DB(database).Rev(id)
+		if err != nil {
+			return err
+		}
+
 		return d.delete(database, id, rev)
 	} else {
 		pathmap, couchdoc, id, newDoc, err := d.getPathSpecificStuff(params)
@@ -408,10 +418,19 @@ func (d *Db_backend_couch) save(database string,
 	}
 
 	db, err := d.client.EnsureDB(database)
+	if err != nil {
+		return "", nil, err
+	}
 
 	rev, err := db.Rev(documentId)
+	if err != nil {
+		return "", nil, err
+	}
 
 	_, err = db.Put(documentId, document, rev)
+	if err != nil {
+		return "", nil, err
+	}
 
 	return documentId, document, err
 }
@@ -565,7 +584,7 @@ func filterResultSet(result couchDbResponse, params dragonfruit.QueryParams,
 	}
 	totalNum := len(outResult.Rows)
 	if int(offset) > totalNum {
-		outResult.Rows = make([]couchdbRow, 0, 0)
+		outResult.Rows = make([]couchdbRow, 0)
 	} else if int(limit+offset) > len(outResult.Rows) {
 		outResult.Rows = outResult.Rows[offset:len(outResult.Rows)]
 	} else {
@@ -576,15 +595,18 @@ func filterResultSet(result couchDbResponse, params dragonfruit.QueryParams,
 }
 
 // Load loads a document from the database.
-func (d *Db_backend_couch) load(database string, documentId string, doc interface{}) error {
-	d.ensureConnection()
+func (d *Db_backend_couch) load(database string, documentID string, doc interface{}) error {
+	err := d.ensureConnection()
+	if err != nil {
+		return err
+	}
 	db, err := d.client.EnsureDB(database)
 	if err != nil {
 		return err
 	}
 
 	// mutate the doc
-	err = db.Get(documentId, doc, nil)
+	err = db.Get(documentID, doc, nil)
 	if err != nil {
 		return err
 	}

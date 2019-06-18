@@ -1,4 +1,4 @@
-package backend_couchdb
+package couchdb
 
 import (
 	"github.com/fjl/go-couchdb"

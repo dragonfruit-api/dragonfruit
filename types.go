@@ -51,7 +51,7 @@ type Swagger struct {
 // An external documentation reference
 type ExternalDoc struct {
 	Description string `json:"description,omitempty"`
-	Url         string `json:"url,omitempty"`
+	URL         string `json:"url,omitempty"`
 }
 
 type Tag struct {
@@ -115,13 +115,13 @@ type Schema struct {
 	ReadOnly      bool   `json:"readOnly,omitempty"`
 	// parameters fields -
 	// properties and params share a bunch of fields
-	XML          *XmlRef      `json:"xml,omitempty"`
+	XML          *XMLRef      `json:"xml,omitempty"`
 	ExternalDocs *ExternalDoc `json:"externalDocs,omitempty"`
 	Example      interface{}  `json:"example,omitempty"`
 }
 
 // A definition of the XML represenation of a schema.
-type XmlRef struct {
+type XMLRef struct {
 	Name      string `json:"name,omitempty"`
 	Namespace string `json:"namespace,omitempty"`
 	Prefix    string `json:"prefix,omitempty"`
@@ -144,7 +144,7 @@ type Operation struct {
 	Summary      string               `json:"summary,omitempty"`
 	Description  string               `json:"description,omitempty"`
 	ExternalDocs *ExternalDoc         `json:"externalDocs,omitempty"`
-	OperationId  string               `json:"operationId,omitempty"`
+	OperationID  string               `json:"operationId,omitempty"`
 	Produces     []string             `json:"produces,omitempty"`
 	Consumes     []string             `json:"consumes,omitempty"`
 	Parameters   []*Parameter         `json:"parameters,omitempty"`
@@ -223,7 +223,7 @@ type SecurityScheme struct {
 	Name             string            `json:"name"`
 	In               string            `json:"in"`
 	Flow             string            `json:"flow"`
-	AuthorizationUrl string            `json:"authorizationUrl"`
-	TokenUrl         string            `json:"tokenUrl"`
+	AuthorizationURL string            `json:"authorizationUrl"`
+	TokenURL         string            `json:"tokenUrl"`
 	Scopes           map[string]string `json:"scopes"`
 }

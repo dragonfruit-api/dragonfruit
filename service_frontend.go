@@ -80,7 +80,7 @@ func GetMartiniInstance(cnf Conf) *martini.ClassicMartini {
 }
 
 // ServeDocSet sets up the paths which serve the api documentation
-func ServeDocSet(m *martini.ClassicMartini, db Db_backend, cnf Conf) {
+func ServeDocSet(m *martini.ClassicMartini, db DbBackend, cnf Conf) {
 	m.Map(db)
 	rd, err := db.LoadDefinition(cnf)
 	if err != nil {
@@ -101,13 +101,13 @@ func ServeDocSet(m *martini.ClassicMartini, db Db_backend, cnf Conf) {
 	// create a path for each API described in the doc set
 	for path, pathitem := range rd.Paths {
 
-		NewApiFromSpec(path, pathitem, rd, m)
+		NewAPIFromSpec(path, pathitem, rd, m)
 	}
 
 }
 
-// NewApiFromSpec creates a new API from stored swagger-doc specifications.
-func NewApiFromSpec(path string, pathitem *PathItem, rd *Swagger, m *martini.ClassicMartini) {
+// NewAPIFromSpec creates a new API from stored swagger-doc specifications.
+func NewAPIFromSpec(path string, pathitem *PathItem, rd *Swagger, m *martini.ClassicMartini) {
 
 	var pathArr = map[string]*Operation{
 		"DELETE":  pathitem.Delete,
@@ -146,7 +146,7 @@ func addOperation(path string,
 
 	switch method {
 	case "GET":
-		m.Get(path, func(params martini.Params, req *http.Request, db Db_backend, res http.ResponseWriter) (int, string) {
+		m.Get(path, func(params martini.Params, req *http.Request, db DbBackend, res http.ResponseWriter) (int, string) {
 			isCollection := false
 
 			h := res.Header()
@@ -199,14 +199,14 @@ func addOperation(path string,
 				return 500, string(outerr)
 			}
 			if result.Meta.Count == 0 && (!isCollection) {
-				notFoundError := errors.New("Entity not found.")
+				notFoundError := errors.New("entity not found")
 				return 404, notFoundError.Error()
 			}
 
 			return 200, string(out)
 		})
 	case "POST":
-		m.Post(path, func(params martini.Params, req *http.Request, db Db_backend, res http.ResponseWriter) (int, string) {
+		m.Post(path, func(params martini.Params, req *http.Request, db DbBackend, res http.ResponseWriter) (int, string) {
 			h := res.Header()
 
 			addHeaders(h, "Content-Type", produces)
@@ -248,7 +248,7 @@ func addOperation(path string,
 			return 201, string(out)
 		})
 	case "PUT":
-		m.Put(path, func(params martini.Params, req *http.Request, db Db_backend, res http.ResponseWriter) (int, string) {
+		m.Put(path, func(params martini.Params, req *http.Request, db DbBackend, res http.ResponseWriter) (int, string) {
 			h := res.Header()
 
 			addHeaders(h, "Content-Type", produces)
@@ -292,7 +292,7 @@ func addOperation(path string,
 			return 200, string(out)
 		})
 	case "PATCH":
-		m.Patch(path, func(params martini.Params, req *http.Request, db Db_backend, res http.ResponseWriter) (int, string) {
+		m.Patch(path, func(params martini.Params, req *http.Request, db DbBackend, res http.ResponseWriter) (int, string) {
 			h := res.Header()
 
 			addHeaders(h, "Content-Type", produces)
@@ -336,7 +336,7 @@ func addOperation(path string,
 			return 200, string(out)
 		})
 	case "DELETE":
-		m.Delete(path, func(params martini.Params, db Db_backend, res http.ResponseWriter) (int, string) {
+		m.Delete(path, func(params martini.Params, db DbBackend, res http.ResponseWriter) (int, string) {
 			h := res.Header()
 
 			addHeaders(h, "Content-Type", produces)
@@ -366,7 +366,7 @@ func addOperation(path string,
 		})
 
 	case "OPTIONS":
-		m.Options(path, func(db Db_backend, res http.ResponseWriter) (int, string) {
+		m.Options(path, func(db DbBackend, res http.ResponseWriter) (int, string) {
 			h := res.Header()
 
 			addHeaders(h, "Content-Type", produces)

@@ -1,4 +1,4 @@
-package backend_couchdb
+package couchdb
 
 import (
 	"strings"
@@ -32,6 +32,9 @@ func (d *Db_backend_couch) Prep(database string,
 	}
 
 	err = dbz.Get(id, &vd, nil)
+	if err != nil {
+		return err
+	}
 
 	vd.Language = "javascript"
 
@@ -42,7 +45,10 @@ func (d *Db_backend_couch) Prep(database string,
 			vd.makeQueryParamView(api, api.Get, resource)
 		}
 	}
-	d.save(database, id, vd)
+	_, _, err = d.save(database, id, vd)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
