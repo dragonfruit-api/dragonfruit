@@ -76,7 +76,7 @@ func makeTypeName(path string) string {
 	return inflector.Singularize(matches[(len(matches) - 1)][2])
 }
 
-func (d *Db_backend_couch) ensureConnection() (err error) {
+func (d *DbBackendCouch) ensureConnection() (err error) {
 	defer func() {
 		<-d.connection
 	}()

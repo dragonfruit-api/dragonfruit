@@ -12,14 +12,14 @@ type view struct {
 
 // A CouchDB design document.
 type viewDoc struct {
-	Id       string          `json:"_id"`
+	ID       string          `json:"_id"`
 	Rev      string          `json:"_rev,omitempty"`
 	Language string          `json:"language"`
 	Views    map[string]view `json:"views"`
 }
 
-// Db_backend_couch is the exported client that you would use in your app.
-type Db_backend_couch struct {
+// DbBackendCouch is the exported client that you would use in your app.
+type DbBackendCouch struct {
 	client     *couchdb.Client
 	connection chan bool
 }
