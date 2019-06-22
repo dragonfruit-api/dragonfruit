@@ -1,8 +1,9 @@
 package dragonfruit
 
 import (
-	"github.com/gedex/inflector"
 	"strings"
+
+	"github.com/gedex/inflector"
 )
 
 const (
@@ -10,7 +11,7 @@ const (
 	RANGEEND   = "RangeEnd"
 )
 
-func RegisterType(d Db_backend, byt []byte, cnf Conf, resourceType string, path string) error {
+func RegisterType(d DbBackend, byt []byte, cnf Conf, resourceType string, path string) error {
 	var err error
 
 	sw, swerr := d.LoadDefinition(cnf)
@@ -26,7 +27,7 @@ func RegisterType(d Db_backend, byt []byte, cnf Conf, resourceType string, path 
 
 	modelMap, maperr := Decompose(byt, resourceType, cnf)
 
-	if err != nil {
+	if maperr != nil {
 		return maperr
 	}
 
@@ -46,21 +47,12 @@ func RegisterType(d Db_backend, byt []byte, cnf Conf, resourceType string, path 
 		sw.Paths[k] = v
 	}
 
-	d.SaveDefinition(sw)
+	err = d.SaveDefinition(sw)
 	preperror := d.Prep(path, sw)
 	if preperror != nil {
 		return preperror
 	}
 	return err
-}
-
-// getCommonResponseCodes loads a set of response codes that most of the APIs
-// return.
-func getCommonResponseCodes(cnf Conf, typ string) map[string]*Response {
-	if typ == "collection" {
-		return cnf.CommonCollectionResponses
-	}
-	return cnf.CommonSingleResponses
 }
 
 // getCommonGetParams loads a set of common params that should be added to
@@ -89,28 +81,28 @@ func MakeCommonAPIs(
 
 	// make the collection api - get lists of models and create new models
 	collectionPath := prefix + "/" + pathRoot
-	collectionApi := &PathItem{}
-	collectionApi.Get = makeCollectionOperation(schemaName, schema, upstreamParams, cnf)
-	collectionApi.Post = makePostOperation(schemaName, schema, upstreamParams, cnf)
-	collectionApi.Options = makeCollectionOptionsOperation()
+	collectionAPI := &PathItem{}
+	collectionAPI.Get = makeCollectionOperation(schemaName, schema, upstreamParams, cnf)
+	collectionAPI.Post = makePostOperation(schemaName, schema, upstreamParams, cnf)
+	collectionAPI.Options = makeCollectionOptionsOperation()
 
-	out[collectionPath] = collectionApi
+	out[collectionPath] = collectionAPI
 
 	// make a single API - use this for sub collections too
-	idName, idparam := makePathId(schema)
+	idName, idparam := makePathID(schema)
 	upstreamParams = append(upstreamParams, idparam)
 
 	// TODO - parallelize this...
 	individualPath := prefix + "/" + pathRoot + "/{" + idName + "}"
-	individualApi := &PathItem{}
-	individualApi.Delete = makeDeleteOperation(schemaName, upstreamParams, cnf)
+	individualAPI := &PathItem{}
+	individualAPI.Delete = makeDeleteOperation(schemaName, upstreamParams, cnf)
 
-	individualApi.Get = makeSingleGetOperation(schemaName, upstreamParams, cnf)
-	individualApi.Put = makePutOperation(schemaName, schema, upstreamParams, cnf)
-	individualApi.Patch = makePatchOperation(schemaName, upstreamParams, cnf)
-	individualApi.Options = makeSingleOptionsOperation(upstreamParams)
+	individualAPI.Get = makeSingleGetOperation(schemaName, upstreamParams, cnf)
+	individualAPI.Put = makePutOperation(schemaName, schema, upstreamParams, cnf)
+	individualAPI.Patch = makePatchOperation(schemaName, upstreamParams, cnf)
+	individualAPI.Options = makeSingleOptionsOperation(upstreamParams)
 
-	out[individualPath] = individualApi
+	out[individualPath] = individualAPI
 
 	subApis := makeSubApis(individualPath, schema, schemaMap, upstreamParams, cnf)
 	for k, v := range subApis {
@@ -146,9 +138,9 @@ func makeSubApis(
 	return out
 }
 
-// makePathId determines what property to use as the ID param when for paths
+// makePathID determines what property to use as the ID param when for paths
 // which have parameterized IDs (e.g. /model_name/{id}
-func makePathId(schema *Schema) (propName string, idparam *Parameter) {
+func makePathID(schema *Schema) (propName string, idparam *Parameter) {
 	// find a property with "ID" in the name
 	for propName, propValue := range schema.Properties {
 
@@ -204,7 +196,7 @@ func makeDeleteOperation(schemaName string,
 	upstreamParams []*Parameter, cnf Conf) (deleteOp *Operation) {
 
 	deleteOp = &Operation{
-		OperationId: "delete" + schemaName,
+		OperationID: "delete" + schemaName,
 		Summary:     "Delete a " + schemaName + " object.",
 		Responses:   copyResponseMap(cnf.CommonSingleResponses),
 	}
@@ -227,7 +219,7 @@ func makeSingleGetOperation(schemaName string, upstreamParams []*Parameter,
 	cnf Conf) (getOp *Operation) {
 
 	getOp = &Operation{
-		OperationId: "getSingle" + schemaName,
+		OperationID: "getSingle" + schemaName,
 		Summary:     "Get a single " + schemaName + " object.",
 		Responses:   copyResponseMap(cnf.CommonSingleResponses),
 	}
@@ -252,7 +244,7 @@ func makePatchOperation(schemaName string,
 	// Create the put operation
 
 	patchOp = &Operation{
-		OperationId: "updatePartial" + schemaName,
+		OperationID: "updatePartial" + schemaName,
 		Summary:     "Partially update a  " + schemaName + " object.",
 		Responses:   copyResponseMap(cnf.CommonSingleResponses),
 	}
@@ -289,7 +281,7 @@ func makePutOperation(schemaName string, schema *Schema,
 
 	// Create the put operation
 	putOp = &Operation{
-		OperationId: "update" + schemaName,
+		OperationID: "update" + schemaName,
 		Summary:     "Update a " + schemaName + " object.",
 		Responses:   copyResponseMap(cnf.CommonSingleResponses),
 	}
@@ -325,7 +317,7 @@ func makePostOperation(schemaName string, schema *Schema,
 	upstreamParams []*Parameter, cnf Conf) (postOp *Operation) {
 
 	postOp = &Operation{
-		OperationId: "new" + schemaName,
+		OperationID: "new" + schemaName,
 		Summary:     "Create a new " + schemaName + " object.",
 		Responses:   make(map[string]*Response),
 	}
@@ -361,7 +353,7 @@ func makeCollectionOperation(schemaName string, schema *Schema,
 	cnf Conf) (getOp *Operation) {
 
 	getOp = &Operation{
-		OperationId: "get" + schemaName + "Collection",
+		OperationID: "get" + schemaName + "Collection",
 		Summary:     "Get multiple " + inflector.Pluralize(inflector.Singularize(schemaName)) + ".",
 		Responses:   copyResponseMap(cnf.CommonCollectionResponses),
 	}
@@ -391,23 +383,23 @@ func makeCollectionOperation(schemaName string, schema *Schema,
 		case "string":
 			params := makeStringParams(propName, prop)
 			getOp.Parameters = append(getOp.Parameters, params...)
-			break
+
 		// arrays query against their type
 		case "array":
 			if prop.Items.Type != "" {
 				param := makeArrayParams(propName, prop)
 				getOp.Parameters = append(getOp.Parameters, param...)
 			}
-			break
+
 		// ints and numbers...
 		case "number":
 			params := makeNumParams(propName, prop)
 			getOp.Parameters = append(getOp.Parameters, params...)
-			break
+
 		case "integer":
 			params := makeNumParams(propName, prop)
 			getOp.Parameters = append(getOp.Parameters, params...)
-			break
+
 		// anything else (bools)
 		default:
 			param := makeGenParams(propName, prop)
@@ -501,7 +493,7 @@ func makeArrayParams(propName string, schema *Schema) (p []*Parameter) {
 // makeNumParam makes query parameters for numerical values.  If the
 // property does NOT have an enum property, a range query is defined.
 func makeNumParams(propName string, schema *Schema) (p []*Parameter) {
-	p = make([]*Parameter, 0, 0)
+	p = make([]*Parameter, 0)
 	pr := &Parameter{
 		Type:     schema.Type,
 		Minimum:  schema.Minimum,

@@ -1,4 +1,4 @@
-package backend_couchdb
+package couchdb
 
 import (
 	"encoding/json"
@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/dragonfruit-api/dragonfruit"
-
 	"github.com/fjl/go-couchdb"
+
 	"github.com/gedex/inflector"
 	"github.com/pborman/uuid"
 )
@@ -38,7 +38,7 @@ func findPropertyFromPath(model string, path string,
 }
 
 // Connect connects to a couchdb server.
-func (d *Db_backend_couch) Connect(url string) error {
+func (d *DbBackendCouch) Connect(url string) error {
 	db, err := couchdb.NewClient(url, nil)
 	if err != nil {
 		return err
@@ -58,7 +58,7 @@ func getDatabaseName(params dragonfruit.QueryParams) (database string) {
 }
 
 /* This function is rediculous */
-func (d *Db_backend_couch) getPathSpecificStuff(params dragonfruit.QueryParams) ([][]string,
+func (d *DbBackendCouch) getPathSpecificStuff(params dragonfruit.QueryParams) ([][]string,
 	couchdbRow, string, interface{}, error) {
 	var v interface{}
 
@@ -84,7 +84,7 @@ func (d *Db_backend_couch) getPathSpecificStuff(params dragonfruit.QueryParams) 
 
 // Update updates a document
 // TODO - partial document updates
-func (d *Db_backend_couch) Update(params dragonfruit.QueryParams, operation int) (interface{},
+func (d *DbBackendCouch) Update(params dragonfruit.QueryParams, operation int) (interface{},
 	error) {
 
 	pathmap, doc, id, v, err := d.getPathSpecificStuff(params)
@@ -98,6 +98,9 @@ func (d *Db_backend_couch) Update(params dragonfruit.QueryParams, operation int)
 		reflect.ValueOf(doc.Value),
 		reflect.ValueOf(v),
 		operation)
+	if err != nil {
+		return nil, err
+	}
 
 	database := getDatabaseName(params)
 	_, out, err := d.save(database, id, newdoc.Interface())
@@ -122,7 +125,7 @@ func findSubDoc(pathslice [][]string,
 	if len(pathslice) == 0 && (operation == dragonfruit.PUT || operation == dragonfruit.PATCH) {
 		switch bodyParams.Type().Kind() {
 		default:
-			return document, document, errors.New("Body Params must be a map.")
+			return document, document, errors.New("body params must be a map")
 
 		case reflect.Map:
 
@@ -161,7 +164,6 @@ func findSubDoc(pathslice [][]string,
 			}
 			document = newdoc
 			partial = part
-			break
 		case reflect.Map:
 			newdoc, part, err := findSubDoc(pathslice, params, document.MapIndex(currItem), bodyParams, operation)
 			if err != nil {
@@ -169,7 +171,6 @@ func findSubDoc(pathslice [][]string,
 			}
 			document.SetMapIndex(currItem, newdoc)
 			partial = part
-			break
 		case reflect.Slice:
 			// the cyclomatic complexity is too damn high...
 
@@ -214,7 +215,6 @@ func findSubDoc(pathslice [][]string,
 				}
 
 			}
-			break
 
 		}
 
@@ -223,7 +223,7 @@ func findSubDoc(pathslice [][]string,
 	return document, partial, nil
 }
 
-func (d *Db_backend_couch) getRootDocument(params dragonfruit.QueryParams) (couchdbRow, string, error) {
+func (d *DbBackendCouch) getRootDocument(params dragonfruit.QueryParams) (couchdbRow, string, error) {
 
 	viewpath := dragonfruit.ViewPathParamRe.FindAllStringSubmatch(params.Path, -1)
 	// take the first segment from the update path
@@ -248,7 +248,7 @@ func (d *Db_backend_couch) getRootDocument(params dragonfruit.QueryParams) (couc
 	}
 
 	row := result.Rows[0]
-	id := result.Rows[0].Id
+	id := result.Rows[0].ID
 
 	return row, id, err
 
@@ -282,7 +282,7 @@ func fixStupidInterfaceRefs(val reflect.Value) reflect.Value {
 
 // Insert adds a new document to the database
 // TODO - Add subdocuments
-func (d *Db_backend_couch) Insert(params dragonfruit.QueryParams) (interface{},
+func (d *DbBackendCouch) Insert(params dragonfruit.QueryParams) (interface{},
 	error) {
 
 	database := getDatabaseName(params)
@@ -296,8 +296,8 @@ func (d *Db_backend_couch) Insert(params dragonfruit.QueryParams) (interface{},
 	// if there are no path parameters, this is a new primary document
 	// just save it
 	if len(params.PathParams) == 0 {
-		docId := uuid.New()
-		_, doc, err = d.save(database, docId, document)
+		docID := uuid.New()
+		_, doc, err = d.save(database, docID, document)
 	} else {
 		pathmap, couchdoc, id, newDoc, err := d.getPathSpecificStuff(params)
 		if err != nil {
@@ -308,7 +308,13 @@ func (d *Db_backend_couch) Insert(params dragonfruit.QueryParams) (interface{},
 			reflect.ValueOf(couchdoc.Value),
 			reflect.ValueOf(newDoc),
 			dragonfruit.POST)
+		if err != nil {
+			return nil, err
+		}
 		_, _, err = d.save(database, id, docVal.Interface())
+		if err != nil {
+			return nil, err
+		}
 		doc = partialVal.Interface()
 	}
 
@@ -323,7 +329,7 @@ func (d *Db_backend_couch) Insert(params dragonfruit.QueryParams) (interface{},
 
 // LoadDescriptionFromDb loads a resource description from a database backend.
 // (see the backend stuff and types).
-func (d *Db_backend_couch) LoadDefinition(cnf dragonfruit.Conf) (*dragonfruit.Swagger, error) {
+func (d *DbBackendCouch) LoadDefinition(cnf dragonfruit.Conf) (*dragonfruit.Swagger, error) {
 
 	rd := &dragonfruit.Swagger{}
 	err := d.load(SwaggerResourceDB, ResourceDescriptionName, rd)
@@ -338,7 +344,7 @@ func (d *Db_backend_couch) LoadDefinition(cnf dragonfruit.Conf) (*dragonfruit.Sw
 
 // LoadDescriptionFromDb loads a resource description from a database backend.
 // (see the backend stuff and types).
-func (d *Db_backend_couch) SaveDefinition(sw *dragonfruit.Swagger) error {
+func (d *DbBackendCouch) SaveDefinition(sw *dragonfruit.Swagger) error {
 
 	_, _, err := d.save(SwaggerResourceDB, ResourceDescriptionName, sw)
 
@@ -346,7 +352,7 @@ func (d *Db_backend_couch) SaveDefinition(sw *dragonfruit.Swagger) error {
 }
 
 // Remove deletes a document from the database
-func (d *Db_backend_couch) Remove(params dragonfruit.QueryParams) error {
+func (d *DbBackendCouch) Remove(params dragonfruit.QueryParams) error {
 	database := getDatabaseName(params)
 	if len(params.PathParams) == 1 {
 		_, result, err := d.queryView(params)
@@ -359,39 +365,43 @@ func (d *Db_backend_couch) Remove(params dragonfruit.QueryParams) error {
 		}
 
 		target := result.Rows[0]
-		id := target.Id
+		id := target.ID
 		err = d.ensureConnection()
 		if err != nil {
 			return err
 		}
 		rev, err := d.client.DB(database).Rev(id)
+		if err != nil {
+			return err
+		}
+
 		return d.delete(database, id, rev)
-	} else {
-		pathmap, couchdoc, id, newDoc, err := d.getPathSpecificStuff(params)
-		if err != nil {
-			return err
-		}
+	}
 
-		docVal, _, err := findSubDoc(pathmap[1:],
-			params,
-			reflect.ValueOf(couchdoc.Value),
-			reflect.ValueOf(newDoc),
-			dragonfruit.DELETE)
-
-		if err != nil {
-			return err
-		}
-
-		_, _, err = d.save(database, id, docVal.Interface())
-
+	pathmap, couchdoc, id, newDoc, err := d.getPathSpecificStuff(params)
+	if err != nil {
 		return err
 	}
+
+	docVal, _, err := findSubDoc(pathmap[1:],
+		params,
+		reflect.ValueOf(couchdoc.Value),
+		reflect.ValueOf(newDoc),
+		dragonfruit.DELETE)
+
+	if err != nil {
+		return err
+	}
+
+	_, _, err = d.save(database, id, docVal.Interface())
+
+	return err
 
 }
 
 // Delete removes a document from the database
 // this will be made private
-func (d *Db_backend_couch) delete(database string, id string,
+func (d *DbBackendCouch) delete(database string, id string,
 	rev string) error {
 	_, err := d.client.DB(database).Delete(id, rev)
 	return err
@@ -399,8 +409,8 @@ func (d *Db_backend_couch) delete(database string, id string,
 
 // Save saves a document to the database.
 // This should also be made
-func (d *Db_backend_couch) save(database string,
-	documentId string,
+func (d *DbBackendCouch) save(database string,
+	documentID string,
 	document interface{}) (string, interface{}, error) {
 	err := d.ensureConnection()
 	if err != nil {
@@ -408,16 +418,25 @@ func (d *Db_backend_couch) save(database string,
 	}
 
 	db, err := d.client.EnsureDB(database)
+	if err != nil {
+		return "", nil, err
+	}
 
-	rev, err := db.Rev(documentId)
+	rev, err := db.Rev(documentID)
+	if err != nil {
+		return "", nil, err
+	}
 
-	_, err = db.Put(documentId, document, rev)
+	_, err = db.Put(documentID, document, rev)
+	if err != nil {
+		return "", nil, err
+	}
 
-	return documentId, document, err
+	return documentID, document, err
 }
 
 // Query queries a view and returns a result
-func (d *Db_backend_couch) Query(params dragonfruit.QueryParams) (dragonfruit.Container, error) {
+func (d *DbBackendCouch) Query(params dragonfruit.QueryParams) (dragonfruit.Container, error) {
 
 	num, result, err := d.queryView(params)
 	if err != nil {
@@ -455,7 +474,7 @@ func (d *Db_backend_couch) Query(params dragonfruit.QueryParams) (dragonfruit.Co
 //
 // The pickView method selects the appropriate view, based on the inbound
 // parameters.
-func (d *Db_backend_couch) queryView(params dragonfruit.QueryParams) (int,
+func (d *DbBackendCouch) queryView(params dragonfruit.QueryParams) (int,
 	couchDbResponse, error) {
 
 	var (
@@ -565,7 +584,7 @@ func filterResultSet(result couchDbResponse, params dragonfruit.QueryParams,
 	}
 	totalNum := len(outResult.Rows)
 	if int(offset) > totalNum {
-		outResult.Rows = make([]couchdbRow, 0, 0)
+		outResult.Rows = make([]couchdbRow, 0)
 	} else if int(limit+offset) > len(outResult.Rows) {
 		outResult.Rows = outResult.Rows[offset:len(outResult.Rows)]
 	} else {
@@ -576,15 +595,18 @@ func filterResultSet(result couchDbResponse, params dragonfruit.QueryParams,
 }
 
 // Load loads a document from the database.
-func (d *Db_backend_couch) load(database string, documentId string, doc interface{}) error {
-	d.ensureConnection()
+func (d *DbBackendCouch) load(database string, documentID string, doc interface{}) error {
+	err := d.ensureConnection()
+	if err != nil {
+		return err
+	}
 	db, err := d.client.EnsureDB(database)
 	if err != nil {
 		return err
 	}
 
 	// mutate the doc
-	err = db.Get(documentId, doc, nil)
+	err = db.Get(documentID, doc, nil)
 	if err != nil {
 		return err
 	}
@@ -599,7 +621,7 @@ func (d *Db_backend_couch) load(database string, documentId string, doc interfac
 //
 // It returns a string view name and a boolean value to indicate whether
 // a view was found at not.
-func (d *Db_backend_couch) pickView(params dragonfruit.QueryParams,
+func (d *DbBackendCouch) pickView(params dragonfruit.QueryParams,
 	opts map[string]interface{},
 	limit int,
 	offset int) (string, bool) {
@@ -685,7 +707,7 @@ func (d *Db_backend_couch) pickView(params dragonfruit.QueryParams,
 //
 // It returns a boolean to indicate the view was found and the name of the
 // view to use.
-func (d *Db_backend_couch) findQueryView(params dragonfruit.QueryParams,
+func (d *DbBackendCouch) findQueryView(params dragonfruit.QueryParams,
 	opts map[string]interface{}) (string, bool) {
 
 	var vd viewDoc
@@ -697,7 +719,7 @@ func (d *Db_backend_couch) findQueryView(params dragonfruit.QueryParams,
 	}
 
 	// iterate over the passed queryParams map
-	for queryParam, _ := range params.QueryParams {
+	for queryParam := range params.QueryParams {
 		var q string
 		var startKey interface{}
 		var endKey interface{}

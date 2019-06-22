@@ -2,13 +2,14 @@ package dragonfruit
 
 import (
 	"encoding/json"
-	"github.com/gedex/inflector"
 	"math"
 	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gedex/inflector"
 )
 
 const (
@@ -41,7 +42,7 @@ func Decompose(sampledata []byte, baseType string, cnf Conf) (m map[string]*Sche
 	}
 
 	v := reflect.ValueOf(receiver)
-	buildSchema(baseType, m, v)
+	err = buildSchema(baseType, m, v)
 
 	return
 
@@ -106,7 +107,7 @@ func buildSchema(baseType string,
 	for _, propindex := range v.MapKeys() {
 		_, ok := m[baseType].Properties[propindex.String()]
 		if !ok {
-			buildProperty(propindex.String(), baseType, m, v.MapIndex(propindex))
+			err = buildProperty(propindex.String(), baseType, m, v.MapIndex(propindex))
 		}
 
 	}
@@ -129,36 +130,31 @@ func buildProperty(propName string,
 		prop := &Schema{
 			Ref: MakeRef(strings.Title(propName)),
 		}
-		buildSchema(propName, models, sanitized)
+		err = buildSchema(propName, models, sanitized)
 		models[modelName].Properties[propName] = prop
-		break
 
 	case "array":
 		iref := &Schema{}
 		prop := &Schema{}
-		prop.buildSliceProperty(inflector.Singularize(propName), iref, sanitized, models)
+		err = prop.buildSliceProperty(inflector.Singularize(propName), iref, sanitized, models)
 
 		// always pluralize array stuff
 		pname := inflector.Singularize(propName)
 		models[modelName].Properties[pname] = prop
-		break
 
 	case "string":
 		prop := processString(sanitized)
 		models[modelName].Properties[propName] = prop
-		break
 
 	case "number":
 		prop := processNumber(sanitized)
 		models[modelName].Properties[propName] = prop
-		break
 
 	default:
 		prop := &Schema{
 			Type: datatype,
 		}
 		models[modelName].Properties[propName] = prop
-		break
 
 	}
 	return
@@ -278,30 +274,26 @@ func (prop *Schema) buildSliceProperty(name string, i *Schema,
 		datatype, sanitized := translateKind(v.Index(it))
 		switch datatype {
 		case "model":
-			buildSchema(name, m, sanitized)
+			err = buildSchema(name, m, sanitized)
 			appendSubtype(name, m)
 			prop.Items = &Schema{}
 			prop.Items.Ref = MakeRef(strings.Title(name))
-			break
 		case "string":
 			tmpSchema = processString(sanitized)
 			i.Example = tmpSchema.Example
 			prop.Type = "array"
 			prop.Items = i
 			i.Type = datatype
-			break
 		case "number":
 			tmpSchema = processNumber(sanitized)
 			i.Example = tmpSchema.Example
 			i.Type = datatype
 			prop.Type = "array"
 			prop.Items = i
-			break
 		default:
 			prop.Type = "array"
 			prop.Items = i
 			i.Type = datatype
-			break
 		}
 	}
 	return
@@ -385,22 +377,16 @@ func translateKind(v reflect.Value) (datatype string, sanitized reflect.Value) {
 	switch v.Kind() {
 	case reflect.Interface:
 		datatype, sanitized = translateKind(v.Elem())
-		break
 	case reflect.String:
 		datatype = "string"
-		break
 	case reflect.Bool:
 		datatype = "boolean"
-		break
 	case reflect.Float64:
 		datatype = "number"
-		break
 	case reflect.Map:
 		datatype = "model"
-		break
 	case reflect.Slice:
 		datatype = "array"
-		break
 	}
 	return
 }

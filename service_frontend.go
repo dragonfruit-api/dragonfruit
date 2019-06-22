@@ -5,8 +5,6 @@ import (
 
 	"errors"
 	"fmt"
-	"github.com/go-martini/martini"
-	"github.com/martini-contrib/cors"
 	"io/ioutil"
 	"math"
 	"net/http"
@@ -14,6 +12,9 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/go-martini/martini"
+	"github.com/martini-contrib/cors"
 )
 
 var (
@@ -79,7 +80,7 @@ func GetMartiniInstance(cnf Conf) *martini.ClassicMartini {
 }
 
 // ServeDocSet sets up the paths which serve the api documentation
-func ServeDocSet(m *martini.ClassicMartini, db Db_backend, cnf Conf) {
+func ServeDocSet(m *martini.ClassicMartini, db DbBackend, cnf Conf) {
 	m.Map(db)
 	rd, err := db.LoadDefinition(cnf)
 	if err != nil {
@@ -100,13 +101,13 @@ func ServeDocSet(m *martini.ClassicMartini, db Db_backend, cnf Conf) {
 	// create a path for each API described in the doc set
 	for path, pathitem := range rd.Paths {
 
-		NewApiFromSpec(path, pathitem, rd, m)
+		NewAPIFromSpec(path, pathitem, rd, m)
 	}
 
 }
 
-// NewApiFromSpec creates a new API from stored swagger-doc specifications.
-func NewApiFromSpec(path string, pathitem *PathItem, rd *Swagger, m *martini.ClassicMartini) {
+// NewAPIFromSpec creates a new API from stored swagger-doc specifications.
+func NewAPIFromSpec(path string, pathitem *PathItem, rd *Swagger, m *martini.ClassicMartini) {
 
 	var pathArr = map[string]*Operation{
 		"DELETE":  pathitem.Delete,
@@ -145,14 +146,18 @@ func addOperation(path string,
 
 	switch method {
 	case "GET":
-		m.Get(path, func(params martini.Params, req *http.Request, db Db_backend, res http.ResponseWriter) (int, string) {
+		m.Get(path, func(params martini.Params, req *http.Request, db DbBackend, res http.ResponseWriter) (int, string) {
 			isCollection := false
 
 			h := res.Header()
 			addHeaders(h, "Content-Type", produces)
 			addHeaders(h, "Accept", consumes)
 
-			req.ParseForm()
+			err := req.ParseForm()
+			if err != nil {
+				outerr, _ := json.Marshal(err.Error())
+				return 500, string(outerr)
+			}
 
 			// coerce path parameters
 			outParams, err := coerceParam(params, op.Parameters)
@@ -193,16 +198,15 @@ func addOperation(path string,
 				outerr, _ := json.Marshal(err.Error())
 				return 500, string(outerr)
 			}
-			if result.Meta.Count == 0 && (isCollection == false) {
-				notFoundError := errors.New("Entity not found.")
+			if result.Meta.Count == 0 && (!isCollection) {
+				notFoundError := errors.New("entity not found")
 				return 404, notFoundError.Error()
 			}
 
 			return 200, string(out)
 		})
-		break
 	case "POST":
-		m.Post(path, func(params martini.Params, req *http.Request, db Db_backend, res http.ResponseWriter) (int, string) {
+		m.Post(path, func(params martini.Params, req *http.Request, db DbBackend, res http.ResponseWriter) (int, string) {
 			h := res.Header()
 
 			addHeaders(h, "Content-Type", produces)
@@ -210,6 +214,10 @@ func addOperation(path string,
 			// TODO - validate post body.
 
 			val, err := ioutil.ReadAll(req.Body)
+			if err != nil {
+				outerr, _ := json.Marshal(err.Error())
+				return 500, string(outerr)
+			}
 
 			// coerce any required path parameters
 			outParams, err := coerceParam(params, op.Parameters)
@@ -224,17 +232,23 @@ func addOperation(path string,
 				PathParams: outParams,
 				Body:       val,
 			}
+
 			doc, err := db.Insert(q)
 			if err != nil {
 				outerr, _ := json.Marshal(err.Error())
 				return 500, string(outerr)
 			}
+
 			out, err := json.Marshal(doc)
+			if err != nil {
+				outerr, _ := json.Marshal(err.Error())
+				return 500, string(outerr)
+			}
+
 			return 201, string(out)
 		})
-		break
 	case "PUT":
-		m.Put(path, func(params martini.Params, req *http.Request, db Db_backend, res http.ResponseWriter) (int, string) {
+		m.Put(path, func(params martini.Params, req *http.Request, db DbBackend, res http.ResponseWriter) (int, string) {
 			h := res.Header()
 
 			addHeaders(h, "Content-Type", produces)
@@ -242,6 +256,11 @@ func addOperation(path string,
 
 			// TODO - validate put bodies.
 			val, err := ioutil.ReadAll(req.Body)
+			if err != nil {
+				outerr, _ := json.Marshal(err.Error())
+				return 409, string(outerr)
+			}
+
 			outParams, err := coerceParam(params, op.Parameters)
 			if err != nil {
 				outerr, _ := json.Marshal(err.Error())
@@ -256,7 +275,6 @@ func addOperation(path string,
 			}
 
 			doc, err := db.Update(q, PUT)
-
 			if err != nil {
 				if err.Error() == NOTFOUNDERROR {
 					return 404, string(err.Error())
@@ -265,17 +283,27 @@ func addOperation(path string,
 				outerr, _ := json.Marshal(err.Error())
 				return 500, string(outerr)
 			}
+
 			out, err := json.Marshal(doc)
+			if err != nil {
+				outerr, _ := json.Marshal(err.Error())
+				return 500, string(outerr)
+			}
 			return 200, string(out)
 		})
-		break
 	case "PATCH":
-		m.Patch(path, func(params martini.Params, req *http.Request, db Db_backend, res http.ResponseWriter) (int, string) {
+		m.Patch(path, func(params martini.Params, req *http.Request, db DbBackend, res http.ResponseWriter) (int, string) {
 			h := res.Header()
 
 			addHeaders(h, "Content-Type", produces)
 			addHeaders(h, "Accept", consumes)
+
 			val, err := ioutil.ReadAll(req.Body)
+			if err != nil {
+				outerr, _ := json.Marshal(err.Error())
+				return 500, string(outerr)
+			}
+
 			outParams, err := coerceParam(params, op.Parameters)
 			if err != nil {
 				outerr, _ := json.Marshal(err.Error())
@@ -299,12 +327,16 @@ func addOperation(path string,
 				outerr, _ := json.Marshal(err.Error())
 				return 500, string(outerr)
 			}
+
 			out, err := json.Marshal(doc)
+			if err != nil {
+				outerr, _ := json.Marshal(err.Error())
+				return 500, string(outerr)
+			}
 			return 200, string(out)
 		})
-		break
 	case "DELETE":
-		m.Delete(path, func(params martini.Params, db Db_backend, res http.ResponseWriter) (int, string) {
+		m.Delete(path, func(params martini.Params, db DbBackend, res http.ResponseWriter) (int, string) {
 			h := res.Header()
 
 			addHeaders(h, "Content-Type", produces)
@@ -332,10 +364,9 @@ func addOperation(path string,
 			}
 			return 200, ""
 		})
-		break
 
 	case "OPTIONS":
-		m.Options(path, func(db Db_backend, res http.ResponseWriter) (int, string) {
+		m.Options(path, func(db DbBackend, res http.ResponseWriter) (int, string) {
 			h := res.Header()
 
 			addHeaders(h, "Content-Type", produces)
@@ -347,7 +378,6 @@ func addOperation(path string,
 			}
 			return 200, ""
 		})
-		break
 	}
 }
 
@@ -376,7 +406,6 @@ func coerceParam(sentParams martini.Params,
 						return
 					}
 					outParams[key] = val
-					break
 				case "number":
 					val, parseErr := strconv.ParseFloat(sentParam, 32)
 					if parseErr != nil {
@@ -384,18 +413,16 @@ func coerceParam(sentParams martini.Params,
 						return
 					}
 					outParams[key] = val
-					break
 
 				default:
 					outParams[key] = sentParam
-					break
 				}
 				// done with this particular key
-				break
+
 			}
 		}
 
-		if present == false {
+		if !present {
 			return outParams, errors.New("The parameter " + key + " is not valid.")
 		}
 	}
@@ -412,7 +439,7 @@ func coerceQueryParam(sentParams url.Values,
 	err error) {
 	outParams = make(map[string]interface{})
 
-	for key, _ := range sentParams {
+	for key := range sentParams {
 		present := false
 		for _, apiParam := range apiPathParams {
 
@@ -444,7 +471,6 @@ func coerceQueryParam(sentParams url.Values,
 					}
 
 					outParams[key] = val
-					break
 				case "number":
 					val, parseErr := strconv.ParseFloat(sentParam, 32)
 					if parseErr != nil {
@@ -459,7 +485,6 @@ func coerceQueryParam(sentParams url.Values,
 					}
 
 					outParams[key] = val
-					break
 
 				default:
 					strEnumErr := checkStrEnum(apiParam, key, sentParam)
@@ -469,14 +494,13 @@ func coerceQueryParam(sentParams url.Values,
 					}
 					outParams[key] = sentParam
 
-					break
 				}
 				// done with this particular key
 				break
 			}
 		}
 
-		if present == false {
+		if !present {
 			return outParams, errors.New("The parameter " + key + " is not valid.")
 		}
 	}
@@ -490,7 +514,7 @@ func checkStrEnum(apiParam *Parameter, paramName string, sentParam string) error
 		return nil
 	}
 
-	sl := make([]string, 0, 0)
+	sl := make([]string, 0)
 
 	for _, v := range apiParam.Enum {
 		sl = append(sl, v.(string))
@@ -510,7 +534,7 @@ func checkFloatEnum(apiParam *Parameter, paramName string, sentParam float64) er
 		return nil
 	}
 
-	sl := make([]string, 0, 0)
+	sl := make([]string, 0)
 
 	for _, v := range apiParam.Enum {
 		st := strconv.FormatFloat(v.(float64), 'f', -1, 64)
@@ -531,7 +555,7 @@ func checkIntEnum(apiParam *Parameter, paramName string, sentParam int64) error 
 		return nil
 	}
 
-	sl := make([]string, 0, 0)
+	sl := make([]string, 0)
 
 	for _, v := range apiParam.Enum {
 		st := strconv.FormatFloat(v.(float64), 'f', 0, 64)

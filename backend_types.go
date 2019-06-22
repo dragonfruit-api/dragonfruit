@@ -37,7 +37,7 @@ type ContainerMeta struct {
 	Count           int    `json:"count"`
 }
 
-// A container is a wrapper for a list of results, plus some meta information
+// A Container is a wrapper for a list of results, plus some meta information
 // about the result set.
 type Container struct {
 	Meta          ContainerMeta `json:"meta,omitempty"`
@@ -45,9 +45,9 @@ type Container struct {
 	Results       []interface{} `json:"results"`
 }
 
-// The Db_backend interface describes the methods which must be implemented
+// The DbBackend interface describes the methods which must be implemented
 // for any backends used to store data.
-type Db_backend interface {
+type DbBackend interface {
 	//// internal API
 	// connect to a backend server
 	Connect(string) error

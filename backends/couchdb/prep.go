@@ -1,9 +1,10 @@
-package backend_couchdb
+package couchdb
 
 import (
+	"strings"
+
 	"github.com/dragonfruit-api/dragonfruit"
 	"github.com/gedex/inflector"
-	"strings"
 )
 
 // Prep prepares a database to accept API data.
@@ -18,12 +19,12 @@ import (
 // - path views handle parameters embedded in a path
 //
 // the Query method defines access rules and priorities
-func (d *Db_backend_couch) Prep(database string,
+func (d *DbBackendCouch) Prep(database string,
 	resource *dragonfruit.Swagger) error {
 
 	vd := viewDoc{}
 	id := "_design/core"
-	vd.Id = id
+	vd.ID = id
 	vd.Views = make(map[string]view)
 	dbz, err := d.client.EnsureDB(database)
 	if err != nil {
@@ -31,6 +32,9 @@ func (d *Db_backend_couch) Prep(database string,
 	}
 
 	err = dbz.Get(id, &vd, nil)
+	if err != nil {
+		return err
+	}
 
 	vd.Language = "javascript"
 
@@ -41,7 +45,10 @@ func (d *Db_backend_couch) Prep(database string,
 			vd.makeQueryParamView(api, api.Get, resource)
 		}
 	}
-	d.save(database, id, vd)
+	_, _, err = d.save(database, id, vd)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -157,7 +164,7 @@ func (vd *viewDoc) makePathParamView(api *dragonfruit.PathItem,
 
 		vw.MapFunc = vw.MapFunc + "]," + emit[len(emit)-1].singlepath + "); "
 
-		for _, _ = range emit[:(len(emit) - 1)] {
+		for range emit[:(len(emit) - 1)] {
 			vw.MapFunc = vw.MapFunc + " } );"
 		}
 
