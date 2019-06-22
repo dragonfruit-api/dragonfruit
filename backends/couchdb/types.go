@@ -36,7 +36,7 @@ type viewParam struct {
 // Represents a row returned by a couchdb result
 type couchdbRow struct {
 	Doc   map[string]interface{} `json:"doc,omitempty"`
-	Id    string                 `json:"id"`
+	ID    string                 `json:"id"`
 	Key   interface{}            `json:"key"`
 	Value map[string]interface{} `json:"value"`
 }

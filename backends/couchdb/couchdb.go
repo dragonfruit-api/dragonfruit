@@ -248,7 +248,7 @@ func (d *DbBackendCouch) getRootDocument(params dragonfruit.QueryParams) (couchd
 	}
 
 	row := result.Rows[0]
-	id := result.Rows[0].Id
+	id := result.Rows[0].ID
 
 	return row, id, err
 
@@ -365,7 +365,7 @@ func (d *DbBackendCouch) Remove(params dragonfruit.QueryParams) error {
 		}
 
 		target := result.Rows[0]
-		id := target.Id
+		id := target.ID
 		err = d.ensureConnection()
 		if err != nil {
 			return err
