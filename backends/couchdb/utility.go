@@ -1,15 +1,16 @@
-package backend_couchdb
+package couchdb
 
 import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/dragonfruit-api/dragonfruit"
-	"github.com/gedex/inflector"
 	"os/exec"
 	"reflect"
 	"strings"
 	"time"
+
+	"github.com/dragonfruit-api/dragonfruit"
+	"github.com/gedex/inflector"
 )
 
 // sanitizeDoc removes _id and _rev keys from the document map
@@ -75,7 +76,7 @@ func makeTypeName(path string) string {
 	return inflector.Singularize(matches[(len(matches) - 1)][2])
 }
 
-func (d *Db_backend_couch) ensureConnection() (err error) {
+func (d *DbBackendCouch) ensureConnection() (err error) {
 	defer func() {
 		<-d.connection
 	}()
@@ -96,32 +97,32 @@ func (d *Db_backend_couch) ensureConnection() (err error) {
 	s = func() error {
 		var err error
 		fmt.Println("Waiting for couchdb to start...")
-		s_out, err := exec.Command("couchdb", "-s").CombinedOutput()
+		sOut, err := exec.Command("couchdb", "-s").CombinedOutput()
 
 		z := []byte{10}
-		if bytes.Equal(z, s_out) {
+		if bytes.Equal(z, sOut) {
 			time.Sleep(1000 * time.Millisecond)
 			return s()
 		}
 
-		if bytes.Contains(s_out, []byte("Apache CouchDB is running as process")) {
+		if bytes.Contains(sOut, []byte("Apache CouchDB is running as process")) {
 			time.Sleep(1000 * time.Millisecond)
 			return err
 		}
-		if bytes.Contains(s_out, []byte("Apache CouchDB is not running.")) {
+		if bytes.Contains(sOut, []byte("Apache CouchDB is not running.")) {
 			time.Sleep(1000 * time.Millisecond)
 			return s()
 		}
 		if err != nil {
-			fmt.Println(s_out, string(s_out))
+			fmt.Println(sOut, string(sOut))
 			fmt.Println("Launch error: ", err, "please send this to Peter O.")
 		}
 		if err != nil {
 			return err
 		}
 
-		fmt.Println("So this happened: ", string(s_out), "... Please send this to Peter O.")
-		return errors.New(string(s_out))
+		fmt.Println("So this happened: ", string(sOut), "... Please send this to Peter O.")
+		return errors.New(string(sOut))
 
 	}
 

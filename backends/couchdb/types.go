@@ -1,4 +1,4 @@
-package backend_couchdb
+package couchdb
 
 import (
 	"github.com/fjl/go-couchdb"
@@ -12,14 +12,14 @@ type view struct {
 
 // A CouchDB design document.
 type viewDoc struct {
-	Id       string          `json:"_id"`
+	ID       string          `json:"_id"`
 	Rev      string          `json:"_rev,omitempty"`
 	Language string          `json:"language"`
 	Views    map[string]view `json:"views"`
 }
 
-// Db_backend_couch is the exported client that you would use in your app.
-type Db_backend_couch struct {
+// DbBackendCouch is the exported client that you would use in your app.
+type DbBackendCouch struct {
 	client     *couchdb.Client
 	connection chan bool
 }
@@ -36,7 +36,7 @@ type viewParam struct {
 // Represents a row returned by a couchdb result
 type couchdbRow struct {
 	Doc   map[string]interface{} `json:"doc,omitempty"`
-	Id    string                 `json:"id"`
+	ID    string                 `json:"id"`
 	Key   interface{}            `json:"key"`
 	Value map[string]interface{} `json:"value"`
 }
